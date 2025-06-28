@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Опитування - Клуб спортивних ігор</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Опитування</h1>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <a href="{{ url_for('logout') }}">Вийти</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Увійти</a> | 
+                <a href="{{ url_for('register') }}">Зареєструватися</a>
+            {% endif %}
+        </div>
+
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}">Події</a>
+            <a href="{{ url_for('announcements') }}">Оголошення</a>
+            <a href="{{ url_for('polls') }}">Опитування</a>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+            {% endif %}
+        </nav>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        {# ФОРМА СТВОРЕННЯ ОПИТУВАННЯ ТУТ #}
+        {% if current_user.is_authenticated and current_user.is_admin() %}
+            <div class="create-poll-section form-section">
+                <h2>Створити нове опитування</h2>
+                <form action="{{ url_for('polls') }}" method="POST" class="form-narrow">
+                    <input type="text" name="question" placeholder="Питання для опитування" required>
+                    <input type="text" name="option1" placeholder="Варіант відповіді 1" required>
+                    <input type="text" name="option2" placeholder="Варіант відповіді 2" required>
+                    <input type="text" name="option3" placeholder="Варіант відповіді 3 (необов'язково)">
+                    <input type="text" name="option4" placeholder="Варіант відповіді 4 (необов'язково)">
+                    <input type="text" name="option5" placeholder="Варіант відповіді 5 (необов'язково)">
+                    <button type="submit">Створити опитування</button>
+                </form>
+            </div>
+        {% elif current_user.is_authenticated %}
+            <p class="info-message">Лише адміністратори можуть створювати опитування.</p>
+        {% else %}
+            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб створювати опитування.</p>
+        {% endif %}
+
+
+        <div class="polls-list">
+            <h2>Активні опитування</h2> {# Змінив заголовок #}
+            {% if polls %}
+                {% for poll in polls %}
+                    <div class="poll-card">
+                        <h3>{{ poll.question }}</h3>
+                        <p class="poll-meta">Створено: {{ poll.date }} від {{ poll.author }}</p>
+                        
+                        {% if current_user.is_authenticated and current_user.username not in poll.voted_users %}
+                            <form action="{{ url_for('vote_poll', poll_id=poll.id) }}" method="POST">
+                                {% for option_index, option in enumerate(poll.options) %}
+                                    <label class="poll-option-label">
+                                        <input type="radio" name="option_index" value="{{ option_index }}" required>
+                                        {{ option.text }}
+                                    </label><br>
+                                {% endfor %}
+                                <button type="submit">Проголосувати</button>
+                            </form>
+                        {% else %}
+                            <div class="poll-results">
+                                <p>Результати:</p>
+                                <ul>
+                                    {% set total_votes = 0 %}
+                                    {% for option in poll.options %}{% set total_votes = total_votes + option.votes %}{% endfor %}
+
+                                    {% for option in poll.options %}
+                                        <li>
+                                            {{ option.text }}: <strong>{{ option.votes }}</strong> голосів
+                                            {% if total_votes > 0 %}
+                                                ({{ "%.1f" | format((option.votes / total_votes) * 100) }}%)
+                                            {% else %}
+                                                (0%)
+                                            {% endif %}
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                                {% if current_user.is_authenticated and current_user.username in poll.voted_users %}
+                                    <p class="voted-message">Ви вже проголосували в цьому опитуванні.</p>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>Наразі немає активних опитувань.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

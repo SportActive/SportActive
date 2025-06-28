@@ -41,50 +41,48 @@ class User(UserMixin):
         return None
 
 # --- Функции для загрузки/сохранения данных ---
-def load_events():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            events = json.load(f)
-            # Добавляем поле 'teams' если его нет (для обратной совместимости)
-            for event in events:
-                if 'teams' not in event:
-                    event['teams'] = {} # Пустой словарь для команд
-            return events
+# Добавлена более надежная загрузка, возвращает пустой список, если файла нет или он пуст
+def load_json_data(filename):
+    if os.path.exists(filename) and os.path.getsize(filename) > 0:
+        with open(filename, 'r', encoding='utf-8') as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError: # Обработка ошибки, если JSON-файл пустой или поврежден
+                return []
     return []
+
+def save_json_data(filename, data):
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+# Оновлені функції для завантаження/збереження, що використовують load_json_data/save_json_data
+def load_events():
+    events = load_json_data(DATA_FILE)
+    for event in events:
+        if 'teams' not in event:
+            event['teams'] = {}
+    return events
 
 def save_events(events):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(events, f, ensure_ascii=False, indent=4)
+    save_json_data(DATA_FILE, events)
 
 def load_users():
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return []
+    return load_json_data(USERS_FILE)
 
 def save_users(users):
-    with open(USERS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(users, f, ensure_ascii=False, indent=4)
+    save_json_data(USERS_FILE, users)
 
 def load_announcements():
-    if os.path.exists(ANNOUNCEMENTS_FILE):
-        with open(ANNOUNCEMENTS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return []
+    return load_json_data(ANNOUNCEMENTS_FILE)
 
 def save_announcements(announcements):
-    with open(ANNOUNCEMENTS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(announcements, f, ensure_ascii=False, indent=4)
+    save_json_data(ANNOUNCEMENTS_FILE, announcements)
 
 def load_polls():
-    if os.path.exists(POLLS_FILE):
-        with open(POLLS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return []
+    return load_json_data(POLLS_FILE)
 
 def save_polls(polls):
-    with open(POLLS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(polls, f, ensure_ascii=False, indent=4)
+    save_json_data(POLLS_FILE, polls)
 
 # --- Функция загрузки пользователя для Flask-Login ---
 @login_manager.user_loader
@@ -182,7 +180,7 @@ def add_event():
             'name': event_name,
             'date': event_date,
             'participants': [],
-            'teams': {} # Додаємо порожній словник для команд
+            'teams': {}
         })
         save_events(events)
         flash('Подію успішно додано!', 'success')
@@ -202,11 +200,10 @@ def toggle_participation(event_id):
             found_event = True
             if participant_name in event['participants']:
                 event['participants'].remove(participant_name)
-                # Також видаляємо зі списку команд, якщо був
                 for team_name in event['teams']:
                     if participant_name in event['teams'][team_name]:
                         event['teams'][team_name].remove(participant_name)
-                        break # Користувач може бути тільки в одній команді
+                        break
                 flash(f'{participant_name}, вашу участь скасовано для "{event["name"]}".', 'info')
             else:
                 event['participants'].append(participant_name)
@@ -219,67 +216,59 @@ def toggle_participation(event_id):
     save_events(events)
     return redirect(url_for('index'))
 
-# --- Маршруты для объявлений (без изменений) ---
+# --- НОВЫЕ/ИЗМЕНЕННЫЕ МАРШРУТЫ ДЛЯ ОБЪЯВЛЕНИЙ ---
 
-@app.route('/announcements')
+@app.route('/announcements', methods=['GET', 'POST']) # Теперь принимает POST запросы
 def announcements():
-    ann = load_announcements()
-    ann.sort(key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d %H:%M:%S'), reverse=True)
-    return render_template('announcements.html', announcements=ann, current_user=current_user)
-
-@app.route('/add_announcement', methods=['GET', 'POST'])
-@login_required
-def add_announcement():
-    if not current_user.is_admin():
-        flash('У вас немає дозволу на додавання оголошень.', 'error')
-        return redirect(url_for('announcements'))
-
+    # Логика добавления объявления (только для админов)
     if request.method == 'POST':
+        if not current_user.is_authenticated or not current_user.is_admin():
+            flash('У вас немає дозволу на додавання оголошень.', 'error')
+            return redirect(url_for('announcements')) # Перенаправляем на GET-версию
+
         title = request.form['title']
         content = request.form['content']
         if title and content:
-            announcements = load_announcements()
+            announcements_data = load_announcements()
             new_id = 1
-            if announcements:
-                new_id = max(a['id'] for a in announcements) + 1
+            if announcements_data:
+                new_id = max(a['id'] for a in announcements_data) + 1
 
-            announcements.append({
+            announcements_data.append({
                 'id': new_id,
                 'title': title,
                 'content': content,
                 'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'author': current_user.username
             })
-            save_announcements(announcements)
+            save_announcements(announcements_data)
             flash('Оголошення успішно додано!', 'success')
             return redirect(url_for('announcements'))
         else:
             flash('Будь ласка, заповніть усі поля для оголошення.', 'error')
     
-    return render_template('add_announcement.html')
+    # Логика отображения объявлений (для GET-запросов)
+    ann = load_announcements()
+    ann.sort(key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d %H:%M:%S'), reverse=True)
+    return render_template('announcements.html', announcements=ann, current_user=current_user)
 
-# --- Маршруты для опросов (без изменений) ---
 
-@app.route('/polls')
+# --- НОВЫЕ/ИЗМЕНЕННЫЕ МАРШРУТЫ ДЛЯ ОПРОСОВ ---
+
+@app.route('/polls', methods=['GET', 'POST']) # Теперь принимает POST запросы
 def polls():
-    all_polls = load_polls()
-    all_polls.sort(key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d %H:%M:%S'), reverse=True)
-    return render_template('polls.html', polls=all_polls, current_user=current_user)
-
-@app.route('/create_poll', methods=['GET', 'POST'])
-@login_required
-def create_poll():
-    if not current_user.is_admin():
-        flash('У вас немає дозволу на створення опитувань.', 'error')
-        return redirect(url_for('polls'))
-
+    # Логика создания опроса (только для админов)
     if request.method == 'POST':
+        if not current_user.is_authenticated or not current_user.is_admin():
+            flash('У вас немає дозволу на створення опитувань.', 'error')
+            return redirect(url_for('polls')) # Перенаправляем на GET-версию
+
         question = request.form['question']
         options_raw = [request.form[f'option{i}'] for i in range(1, 6) if f'option{i}' in request.form and request.form[f'option{i}']]
         
         if not question or not options_raw:
             flash('Будь ласка, заповніть питання та хоча б один варіант відповіді.', 'error')
-            return render_template('create_poll.html')
+            return render_template('polls.html', polls=load_polls(), current_user=current_user) # Возвращаем на страницу опросов с ошибкой
 
         polls_data = load_polls()
         new_poll_id = 1
@@ -302,7 +291,10 @@ def create_poll():
         flash('Опитування успішно створено!', 'success')
         return redirect(url_for('polls'))
     
-    return render_template('create_poll.html')
+    # Логика отображения опросов (для GET-запросов)
+    all_polls = load_polls()
+    all_polls.sort(key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d %H:%M:%S'), reverse=True)
+    return render_template('polls.html', polls=all_polls, current_user=current_user)
 
 @app.route('/vote_poll/<int:poll_id>', methods=['POST'])
 @login_required
@@ -375,7 +367,7 @@ def toggle_fee_status(user_id):
     
     return redirect(url_for('manage_fees'))
 
-# --- НОВЫЕ МАРШРУТЫ ДЛЯ УПРАВЛЕНИЯ КОМАНДАМИ ---
+# --- Маршруты для управления командами (без изменений) ---
 
 @app.route('/manage_teams/<int:event_id>')
 @login_required
@@ -391,15 +383,11 @@ def manage_teams(event_id):
         flash('Подія не знайдена.', 'error')
         return redirect(url_for('index'))
     
-    # Отримуємо всіх учасників, які підтвердили участь у цій події
     all_participants = event.get('participants', [])
-    
-    # Визначаємо, які учасники вже в командах
     assigned_participants = set()
     for team_name, members in event.get('teams', {}).items():
         assigned_participants.update(members)
     
-    # Учасники, які ще не розподілені по командам
     unassigned_participants = [p for p in all_participants if p not in assigned_participants]
     
     return render_template('manage_teams.html', 
@@ -420,15 +408,12 @@ def save_teams(event_id):
         if event['id'] == event_id:
             found_event = True
             new_teams = {}
-            # Перебираємо всі поля форми, які починаються з 'team_name_'
             for key, value in request.form.items():
                 if key.startswith('team_name_'):
                     team_index = key.replace('team_name_', '')
                     team_name = value.strip()
-                    # Отримуємо учасників для цієї команди
                     members_str = request.form.get(f'team_members_{team_index}', '').strip()
-                    if team_name: # Тільки якщо назва команди не порожня
-                        # Розділяємо учасників за комою, видаляємо пробіли та пусті елементи
+                    if team_name:
                         members = [m.strip() for m in members_str.split(',') if m.strip()]
                         new_teams[team_name] = members
             

@@ -26,8 +26,6 @@
             <a href="{{ url_for('announcements') }}">Оголошення</a>
             <a href="{{ url_for('polls') }}">Опитування</a>
             {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="{{ url_for('add_announcement') }}" class="admin-action">Додати оголошення</a>
-                <a href="{{ url_for('create_poll') }}" class="admin-action">Створити опитування</a>
                 <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
             {% endif %}
         </nav>
@@ -77,7 +75,6 @@
                             {% endfor %}
                         </ul>
 
-                        {# Відображення команд, якщо вони є #}
                         {% if event.teams %}
                             <div class="teams-display">
                                 <h4>Розподіл по командам:</h4>
@@ -103,7 +100,6 @@
                                     {% endif %}
                                 </button>
                             </form>
-                            {# Посилання для адміна на керування командами #}
                             {% if current_user.is_admin() %}
                                 <a href="{{ url_for('manage_teams', event_id=event.id) }}" class="admin-manage-teams-link">Керувати командами</a>
                             {% endif %}

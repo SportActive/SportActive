@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Оголошення - Клуб спортивних ігор</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Оголошення</h1>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <a href="{{ url_for('logout') }}">Вийти</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Увійти</a> | 
+                <a href="{{ url_for('register') }}">Зареєструватися</a>
+            {% endif %}
+        </div>
+
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}">Події</a>
+            <a href="{{ url_for('announcements') }}">Оголошення</a>
+            <a href="{{ url_for('polls') }}">Опитування</a>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+            {% endif %}
+        </nav>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        {# ФОРМА ДОДАВАННЯ ОГОЛОШЕННЯ ТУТ #}
+        {% if current_user.is_authenticated and current_user.is_admin() %}
+            <div class="add-announcement-section form-section">
+                <h2>Додати нове оголошення</h2>
+                <form action="{{ url_for('announcements') }}" method="POST" class="form-narrow">
+                    <input type="text" name="title" placeholder="Заголовок оголошення" required>
+                    <textarea name="content" placeholder="Текст оголошення" rows="8" required></textarea>
+                    <button type="submit">Опублікувати оголошення</button>
+                </form>
+            </div>
+        {% elif current_user.is_authenticated %}
+            <p class="info-message">Лише адміністратори можуть додавати оголошення.</p>
+        {% else %}
+            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб додавати оголошення.</p>
+        {% endif %}
+
+
+        <div class="announcements-list">
+            <h2>Всі оголошення</h2> {# Змінив заголовок #}
+            {% if announcements %}
+                {% for ann in announcements %}
+                    <div class="announcement-card">
+                        <h3>{{ ann.title }}</h3>
+                        <p class="announcement-meta">Опубліковано: {{ ann.date }} від {{ ann.author }}</p>
+                        <p>{{ ann.content | safe }}</p>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>Наразі немає оголошень.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
