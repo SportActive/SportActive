@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Клуб спортивних ігор</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Клуб спортивних ігор</h1>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <a href="{{ url_for('logout') }}">Вийти</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Увійти</a> | 
+                <a href="{{ url_for('register') }}">Зареєструватися</a>
+            {% endif %}
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}.
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="add-event-section">
+            <h2>Додати нову подію</h2>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+                <form action="{{ url_for('add_event') }}" method="POST">
+                    <input type="text" name="event_name" placeholder="Назва події (напр. Бадмінтон)" required>
+                    <input type="date" name="event_date" required>
+                    <button type="submit">Додати подію</button>
+                </form>
+            {% elif current_user.is_authenticated %}
+                <p>Лише адміністратори можуть додавати події.</p>
+            {% else %}
+                <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a>, щоб додавати події.</p>
+            {% endif %}
+        </div>
+
+        <div class="events-list">
+            <h2>Майбутні події</h2>
+            {% if events %}
+                {% for event in events %}
+                    <div class="event-card">
+                        <h3>{{ event.name }} - {{ event.date }}</h3>
+                        <p>Учасників: <strong>{{ event.participants | length }}</strong></p>
+                        <ul>
+                            {% for participant in event.participants %}
+                                <li>{{ participant }}</li>
+                            {% else %}
+                                <li>Поки що ніхто не зареєструвався.</li>
+                            {% endfor %}
+                        </ul>
+                        {% if current_user.is_authenticated %}
+                            <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST">
+                                <button type="submit">
+                                    {% if current_user.username in event.participants %}
+                                        Скасувати участь
+                                    {% else %}
+                                        Я зможу
+                                    {% endif %}
+                                </button>
+                            </form>
+                        {% else %}
+                            <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a>, щоб відмітити участь.</p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>Наразі немає запланованих подій. Додайте першу подію!</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,8 @@
+[
+    {
+        "id": 1,
+        "username": "Кирило",
+        "password_hash": "scrypt:32768:8:1$pQJps9ljycybnj5M$0552d308e3f1794405c771043a401799e783107d3a29cd283ba9fa34ffec18ae0c4a4458071e545707dc592a8a60a366a74a7bc0c0c8661e589c157d4a8b21f8",
+        "role": "admin"
+    }
+]

@@ -1,0 +1,281 @@
+/* Основные стили */
+body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #eef2f5; /* Светлый фон */
+    color: #333;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+.container {
+    background-color: #ffffff;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    max-width: 900px; /* Увеличим максимальную ширину */
+    width: 100%;
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+h1, h2, h3 {
+    color: #2c3e50; /* Темный заголовок */
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+h1 {
+    font-size: 2.5em;
+    font-weight: 700;
+}
+
+h2 {
+    font-size: 1.8em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-top: 30px;
+    margin-bottom: 20px;
+}
+
+/* Секции */
+.add-event-section, .events-list {
+    margin-bottom: 40px;
+    padding-top: 20px;
+}
+
+/* Формы */
+form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px; /* Увеличим отступы между элементами */
+    margin-top: 20px;
+    justify-content: center;
+    align-items: center; /* Выравнивание элементов по центру вертикали */
+}
+
+form input[type="text"],
+form input[type="date"],
+form input[type="password"] {
+    padding: 12px 15px; /* Увеличим padding */
+    border: 1px solid #c0d3eb; /* Более мягкий цвет рамки */
+    border-radius: 8px; /* Скруглим углы */
+    flex-grow: 1;
+    min-width: 200px;
+    font-size: 1em;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+form input[type="text"]:focus,
+form input[type="date"]:focus,
+form input[type="password"]:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Эффект свечения при фокусе */
+    outline: none;
+}
+
+form button {
+    background-color: #007bff;
+    color: white;
+    padding: 12px 25px; /* Увеличим padding */
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1em;
+    font-weight: 600;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    flex-shrink: 0; /* Не сжимать кнопку */
+}
+
+form button:hover {
+    background-color: #0056b3;
+    transform: translateY(-2px); /* Небольшой эффект при наведении */
+}
+
+form button:active {
+    transform: translateY(0);
+}
+
+/* Карточки событий */
+.event-card {
+    background-color: #f8fbfd; /* Очень светлый фон для карточек */
+    border: 1px solid #e0e9f0;
+    border-radius: 10px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); /* Более выраженная тень */
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.event-card:hover {
+    transform: translateY(-5px); /* Эффект поднятия при наведении */
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.event-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    text-align: left;
+    color: #4a698a; /* Цвет заголовка карточки */
+    font-size: 1.5em;
+}
+
+.event-card p {
+    margin-bottom: 10px;
+    color: #555;
+}
+
+.event-card ul {
+    list-style: none;
+    padding: 0;
+    margin-top: 15px;
+}
+
+.event-card ul li {
+    background-color: #eef2f5; /* Фон для каждого участника */
+    border-left: 4px solid #007bff; /* Яркая полоска слева */
+    padding: 10px 15px;
+    margin-bottom: 8px;
+    border-radius: 5px;
+    font-weight: 500;
+    color: #333;
+}
+
+.event-card ul li:last-child {
+    margin-bottom: 0;
+}
+
+
+/* Сообщения flash */
+.flashes {
+    list-style: none;
+    padding: 0;
+    margin: 25px 0;
+    text-align: center;
+}
+
+.flashes li {
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1.05em;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.flashes .success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.flashes .error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.flashes .info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+/* Стили для аутентификации и администратора */
+.auth-links {
+    text-align: right;
+    margin-bottom: 25px;
+    font-size: 1.1em;
+}
+
+.auth-links a {
+    margin-left: 15px;
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.auth-links a:hover {
+    color: #0056b3;
+    text-decoration: underline;
+}
+
+.auth-links p {
+    display: inline-block;
+    margin: 0;
+    margin-right: 10px;
+    font-weight: bold;
+    color: #444;
+}
+
+.admin-label {
+    font-size: 0.8em;
+    color: #28a745;
+    background-color: #e6ffed; /* Более светлый фон для метки */
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+    font-weight: 600;
+    border: 1px solid #c3e6cb;
+}
+
+/* Сообщения вместо форм для неавторизованных/не-админов */
+.add-event-section p,
+.event-card p {
+    text-align: center;
+    color: #666;
+    margin-top: 20px;
+}
+
+.add-event-section p a,
+.event-card p a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.add-event-section p a:hover,
+.event-card p a:hover {
+    text-decoration: underline;
+}
+
+/* Адаптивность для маленьких экранов */
+@media (max-width: 768px) {
+    .container {
+        padding: 20px;
+        margin: 10px;
+    }
+
+    h1 {
+        font-size: 2em;
+    }
+
+    h2 {
+        font-size: 1.5em;
+    }
+
+    form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    form input[type="text"],
+    form input[type="date"],
+    form input[type="password"],
+    form button {
+        width: 100%; /* Занимают всю ширину */
+        min-width: unset;
+    }
+
+    .auth-links {
+        text-align: center;
+    }
+    
+    .auth-links a {
+        margin: 0 5px;
+    }
+}
