@@ -345,3 +345,184 @@ form button:active {
 .small-button:hover {
     background-color: #0056b3;
 }
+/* --- Стилі для розподілу по командам --- */
+.teams-display {
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px dashed #eee;
+}
+
+.teams-display h4 {
+    text-align: left;
+    margin-bottom: 10px;
+    color: #0056b3;
+    font-size: 1.2em;
+}
+
+.teams-display p {
+    margin-bottom: 5px;
+    font-size: 0.95em;
+    color: #444;
+}
+
+.admin-manage-teams-link {
+    display: inline-block;
+    background-color: #6c757d; /* Серый цвет для админ-действия */
+    color: white;
+    padding: 8px 15px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 0.9em;
+    margin-top: 15px;
+    transition: background-color 0.3s ease;
+}
+
+.admin-manage-teams-link:hover {
+    background-color: #5a6268;
+}
+
+/* Стилі для сторінки керування командами */
+.team-management-section {
+    display: flex;
+    gap: 30px;
+    margin-top: 30px;
+    flex-wrap: wrap; /* Для адаптивності */
+}
+
+.unassigned-participants {
+    flex: 1;
+    min-width: 250px;
+    background-color: #f8fbfd;
+    border: 1px solid #e0e9f0;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.unassigned-participants h3 {
+    text-align: left;
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #2c3e50;
+    font-size: 1.4em;
+}
+
+.participant-list {
+    list-style: none;
+    padding: 0;
+}
+
+.participant-list li {
+    background-color: #eef2f5;
+    border-left: 4px solid #f0ad4e; /* Желтый для нераспределенных */
+    padding: 10px 15px;
+    margin-bottom: 8px;
+    border-radius: 5px;
+    cursor: grab; /* Курсор для перетаскивания */
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.participant-list li:hover {
+    background-color: #e2e6ea;
+}
+
+.participant-list li.dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+}
+
+.teams-form {
+    flex: 2; /* Занимает больше места */
+    min-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background-color: #f8fbfd;
+    border: 1px solid #e0e9f0;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.team-block {
+    border: 1px solid #c0d3eb;
+    border-radius: 8px;
+    padding: 15px;
+    background-color: #fff;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.03);
+}
+
+.team-block input[type="text"] {
+    width: calc(100% - 20px); /* Учитываем padding */
+    margin-bottom: 10px;
+}
+
+.team-block textarea {
+    width: calc(100% - 20px);
+    margin-bottom: 10px;
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Стили для кнопок внутри форм */
+.teams-form button.add-button {
+    background-color: #28a745; /* Зеленая кнопка "Додати" */
+    margin-top: 10px;
+}
+
+.teams-form button.add-button:hover {
+    background-color: #218838;
+}
+
+.teams-form button.save-button {
+    background-color: #007bff; /* Синяя кнопка "Зберегти" */
+    margin-top: 10px;
+}
+
+.teams-form button.save-button:hover {
+    background-color: #0056b3;
+}
+
+.teams-form button.remove-team-btn {
+    background-color: #dc3545; /* Красная кнопка "Видалити" */
+    padding: 5px 10px;
+    font-size: 0.85em;
+    margin-top: 5px;
+}
+
+.teams-form button.remove-team-btn:hover {
+    background-color: #c82333;
+}
+
+.back-link {
+    display: block;
+    text-align: center;
+    margin-top: 30px;
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+    color: #0056b3;
+}
+
+/* Drag-over эффект для textarea */
+textarea.drag-over {
+    border: 2px dashed #007bff;
+    background-color: #e0f2ff;
+}
+
+/* Адаптивность для маленьких экранов */
+@media (max-width: 768px) {
+    .team-management-section {
+        flex-direction: column;
+    }
+    .unassigned-participants,
+    .teams-form {
+        min-width: unset;
+        width: 100%;
+    }
+}

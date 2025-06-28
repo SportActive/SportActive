@@ -21,12 +21,12 @@ POLLS_FILE = 'polls.json'
 
 # --- Модель пользователя для Flask-Login ---
 class User(UserMixin):
-    def __init__(self, id, username, password_hash, role='user', has_paid_fees=False): # Додано 'has_paid_fees'
+    def __init__(self, id, username, password_hash, role='user', has_paid_fees=False):
         self.id = id
         self.username = username
         self.password_hash = password_hash
         self.role = role
-        self.has_paid_fees = has_paid_fees # Зберігаємо статус сплати внесків
+        self.has_paid_fees = has_paid_fees
 
     def is_admin(self):
         return self.role == 'admin'
@@ -36,16 +36,20 @@ class User(UserMixin):
         users = load_users()
         for user_data in users:
             if str(user_data['id']) == str(user_id):
-                # Передаємо також status сплати внесків
                 return User(user_data['id'], user_data['username'], user_data['password_hash'], 
                             user_data.get('role', 'user'), user_data.get('has_paid_fees', False))
         return None
 
-# --- Функции для загрузки/сохранения данных (добавлены для новых файлов) ---
+# --- Функции для загрузки/сохранения данных ---
 def load_events():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            events = json.load(f)
+            # Добавляем поле 'teams' если его нет (для обратной совместимости)
+            for event in events:
+                if 'teams' not in event:
+                    event['teams'] = {} # Пустой словарь для команд
+            return events
     return []
 
 def save_events(events):
@@ -111,7 +115,6 @@ def register():
 
         new_user_role = 'admin' if not users else 'user' 
         
-        # Додаємо has_paid_fees зі значенням False за замовчуванням
         users.append({'id': new_id, 'username': username, 'password_hash': hashed_password, 'role': new_user_role, 'has_paid_fees': False})
         save_users(users)
         flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
@@ -133,7 +136,6 @@ def login():
         for user_data in users:
             if user_data['username'] == username:
                 if check_password_hash(user_data['password_hash'], password):
-                    # Передаємо також status сплати внесків при вході
                     user_found = User(user_data['id'], user_data['username'], user_data['password_hash'], 
                                       user_data.get('role', 'user'), user_data.get('has_paid_fees', False))
                     break
@@ -160,7 +162,6 @@ def logout():
 @app.route('/')
 def index():
     events = load_events()
-    # Завантажуємо всіх користувачів, щоб можна було перевірити їх статус внесків
     all_users_data = load_users() 
     users_fee_status = {u['username']: u.get('has_paid_fees', False) for u in all_users_data}
     return render_template('index.html', events=events, current_user=current_user, users_fee_status=users_fee_status)
@@ -180,7 +181,8 @@ def add_event():
             'id': len(events) + 1,
             'name': event_name,
             'date': event_date,
-            'participants': []
+            'participants': [],
+            'teams': {} # Додаємо порожній словник для команд
         })
         save_events(events)
         flash('Подію успішно додано!', 'success')
@@ -200,6 +202,11 @@ def toggle_participation(event_id):
             found_event = True
             if participant_name in event['participants']:
                 event['participants'].remove(participant_name)
+                # Також видаляємо зі списку команд, якщо був
+                for team_name in event['teams']:
+                    if participant_name in event['teams'][team_name]:
+                        event['teams'][team_name].remove(participant_name)
+                        break # Користувач може бути тільки в одній команді
                 flash(f'{participant_name}, вашу участь скасовано для "{event["name"]}".', 'info')
             else:
                 event['participants'].append(participant_name)
@@ -333,7 +340,7 @@ def vote_poll(poll_id):
 
     return redirect(url_for('polls'))
 
-# --- НОВЫЕ МАРШРУТЫ ДЛЯ УПРАВЛЕНИЯ ВЗНОСАМИ ---
+# --- Маршруты для управления взносами (без изменений) ---
 
 @app.route('/manage_fees')
 @login_required
@@ -343,7 +350,6 @@ def manage_fees():
         return redirect(url_for('index'))
     
     users = load_users()
-    # Сортируем пользователей по имени
     users.sort(key=lambda u: u['username'].lower())
     return render_template('manage_fees.html', users=users, current_user=current_user)
 
@@ -359,7 +365,7 @@ def toggle_fee_status(user_id):
     for user in users:
         if user['id'] == user_id:
             found_user = True
-            user['has_paid_fees'] = not user.get('has_paid_fees', False) # Переключаем статус
+            user['has_paid_fees'] = not user.get('has_paid_fees', False)
             save_users(users)
             flash(f'Статус внесків для {user["username"]} оновлено.', 'success')
             break
@@ -368,6 +374,73 @@ def toggle_fee_status(user_id):
         flash('Користувача не знайдено.', 'error')
     
     return redirect(url_for('manage_fees'))
+
+# --- НОВЫЕ МАРШРУТЫ ДЛЯ УПРАВЛЕНИЯ КОМАНДАМИ ---
+
+@app.route('/manage_teams/<int:event_id>')
+@login_required
+def manage_teams(event_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на керування командами.', 'error')
+        return redirect(url_for('index'))
+
+    events = load_events()
+    event = next((e for e in events if e['id'] == event_id), None)
+
+    if not event:
+        flash('Подія не знайдена.', 'error')
+        return redirect(url_for('index'))
+    
+    # Отримуємо всіх учасників, які підтвердили участь у цій події
+    all_participants = event.get('participants', [])
+    
+    # Визначаємо, які учасники вже в командах
+    assigned_participants = set()
+    for team_name, members in event.get('teams', {}).items():
+        assigned_participants.update(members)
+    
+    # Учасники, які ще не розподілені по командам
+    unassigned_participants = [p for p in all_participants if p not in assigned_participants]
+    
+    return render_template('manage_teams.html', 
+                           event=event, 
+                           unassigned_participants=unassigned_participants,
+                           current_user=current_user)
+
+@app.route('/save_teams/<int:event_id>', methods=['POST'])
+@login_required
+def save_teams(event_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на керування командами.', 'error')
+        return redirect(url_for('index'))
+
+    events = load_events()
+    found_event = False
+    for event in events:
+        if event['id'] == event_id:
+            found_event = True
+            new_teams = {}
+            # Перебираємо всі поля форми, які починаються з 'team_name_'
+            for key, value in request.form.items():
+                if key.startswith('team_name_'):
+                    team_index = key.replace('team_name_', '')
+                    team_name = value.strip()
+                    # Отримуємо учасників для цієї команди
+                    members_str = request.form.get(f'team_members_{team_index}', '').strip()
+                    if team_name: # Тільки якщо назва команди не порожня
+                        # Розділяємо учасників за комою, видаляємо пробіли та пусті елементи
+                        members = [m.strip() for m in members_str.split(',') if m.strip()]
+                        new_teams[team_name] = members
+            
+            event['teams'] = new_teams
+            save_events(events)
+            flash('Команди успішно збережено!', 'success')
+            break
+    
+    if not found_event:
+        flash('Подія не знайдена.', 'error')
+    
+    return redirect(url_for('manage_teams', event_id=event_id))
 
 
 if __name__ == '__main__':

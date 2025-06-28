@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Керування командами для {{ event.name }} - Клуб спортивних ігор</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Керування командами для події: "{{ event.name }}"</h1>
+        <p class="event-date-info">Дата події: {{ event.date }}</p>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <a href="{{ url_for('logout') }}">Вийти</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Увійти</a> | 
+                <a href="{{ url_for('register') }}">Зареєструватися</a>
+            {% endif %}
+        </div>
+
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}">Події</a>
+            <a href="{{ url_for('announcements') }}">Оголошення</a>
+            <a href="{{ url_for('polls') }}">Опитування</a>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('add_announcement') }}" class="admin-action">Додати оголошення</a>
+                <a href="{{ url_for('create_poll') }}" class="admin-action">Створити опитування</a>
+                <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+            {% endif %}
+        </nav>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="team-management-section">
+            <div class="unassigned-participants">
+                <h3>Нерозподілені учасники ({{ unassigned_participants | length }}):</h3>
+                <ul id="unassigned-list" class="participant-list">
+                    {% for participant in unassigned_participants %}
+                        <li draggable="true" data-name="{{ participant }}">{{ participant }}</li>
+                    {% else %}
+                        <li>Немає нерозподілених учасників.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <form action="{{ url_for('save_teams', event_id=event.id) }}" method="POST" class="teams-form">
+                <div id="teams-container">
+                    {# Динамічно додані команди або існуючі #}
+                    {% if event.teams %}
+                        {% for team_name, members in event.teams.items() %}
+                            <div class="team-block">
+                                <input type="text" name="team_name_{{ loop.index0 }}" placeholder="Назва команди" value="{{ team_name }}" required>
+                                <textarea name="team_members_{{ loop.index0 }}" placeholder="Учасники через кому (напр. Іван, Петро, Олена)" rows="3">{{ members | join(', ') }}</textarea>
+                                <button type="button" class="remove-team-btn small-button">Видалити команду</button>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="team-block">
+                            <input type="text" name="team_name_0" placeholder="Назва команди" required>
+                            <textarea name="team_members_0" placeholder="Учасники через кому (напр. Іван, Петро, Олена)" rows="3"></textarea>
+                            <button type="button" class="remove-team-btn small-button">Видалити команду</button>
+                        </div>
+                    {% endif %}
+                </div>
+                <button type="button" id="add-team-btn" class="add-button">Додати команду</button>
+                <button type="submit" class="save-button">Зберегти команди</button>
+            </form>
+        </div>
+        <a href="{{ url_for('index') }}" class="back-link">← Повернутися до подій</a>
+    </div>
+
+    <script>
+        // JavaScript для додавання/видалення полів команд
+        document.addEventListener('DOMContentLoaded', function() {
+            let teamIndex = {{ event.teams | length if event.teams else 0 }}; // Початковий індекс для нових команд
+
+            document.getElementById('add-team-btn').addEventListener('click', function() {
+                const container = document.getElementById('teams-container');
+                const newTeamBlock = document.createElement('div');
+                newTeamBlock.className = 'team-block';
+                newTeamBlock.innerHTML = `
+                    <input type="text" name="team_name_${teamIndex}" placeholder="Назва команди" required>
+                    <textarea name="team_members_${teamIndex}" placeholder="Учасники через кому (напр. Іван, Петро, Олена)" rows="3"></textarea>
+                    <button type="button" class="remove-team-btn small-button">Видалити команду</button>
+                `;
+                container.appendChild(newTeamBlock);
+                teamIndex++;
+            });
+
+            document.getElementById('teams-container').addEventListener('click', function(e) {
+                if (e.target && e.target.classList.contains('remove-team-btn')) {
+                    e.target.closest('.team-block').remove();
+                }
+            });
+
+            // Реалізація перетягування (Drag & Drop)
+            const unassignedList = document.getElementById('unassigned-list');
+            let draggedItem = null;
+
+            // Обробка початку перетягування
+            unassignedList.addEventListener('dragstart', (e) => {
+                draggedItem = e.target;
+                e.dataTransfer.setData('text/plain', draggedItem.dataset.name); // Передаємо ім'я учасника
+                e.target.classList.add('dragging');
+            });
+
+            unassignedList.addEventListener('dragend', (e) => {
+                e.target.classList.remove('dragging');
+            });
+
+            // Обробка входу/виходу над зонами drop
+            document.getElementById('teams-container').addEventListener('dragover', (e) => {
+                e.preventDefault(); // Дозволяємо drop
+                if (e.target.tagName === 'TEXTAREA') {
+                    e.target.classList.add('drag-over');
+                }
+            });
+
+            document.getElementById('teams-container').addEventListener('dragleave', (e) => {
+                if (e.target.tagName === 'TEXTAREA') {
+                    e.target.classList.remove('drag-over');
+                }
+            });
+
+            // Обробка drop
+            document.getElementById('teams-container').addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (e.target.tagName === 'TEXTAREA') {
+                    e.target.classList.remove('drag-over');
+                    const participantName = e.dataTransfer.getData('text/plain');
+                    const textarea = e.target;
+                    let currentText = textarea.value.trim();
+                    if (currentText) {
+                        currentText += ', ' + participantName;
+                    } else {
+                        currentText = participantName;
+                    }
+                    textarea.value = currentText;
+
+                    // Видалити перетягнутого учасника зі списку нерозподілених
+                    if (draggedItem) {
+                        draggedItem.remove();
+                        draggedItem = null;
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
