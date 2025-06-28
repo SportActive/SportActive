@@ -279,3 +279,69 @@ form button:active {
         margin: 0 5px;
     }
 }
+/* --- Стилі для badges та списку користувачів --- */
+.fee-paid-badge {
+    color: #28a745; /* Зелений колір */
+    font-weight: bold;
+    margin-left: 5px;
+    font-size: 0.9em;
+}
+
+/* Стилі для таблиці управління внесками */
+.user-fees-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    overflow: hidden; /* Щоб border-radius працював для заголовка */
+}
+
+.user-fees-list th,
+.user-fees-list td {
+    padding: 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.user-fees-list th {
+    background-color: #f0f4f7;
+    color: #4a698a;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9em;
+}
+
+.user-fees-list tr:last-child td {
+    border-bottom: none;
+}
+
+.user-fees-list tr:hover {
+    background-color: #f6f9fc;
+}
+
+.fee-paid-status {
+    color: #28a745; /* Зелений */
+    font-weight: bold;
+}
+
+.fee-unpaid-status {
+    color: #dc3545; /* Червоний */
+    font-weight: bold;
+}
+
+.small-button {
+    padding: 8px 12px;
+    font-size: 0.9em;
+    border-radius: 5px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.small-button:hover {
+    background-color: #0056b3;
+}

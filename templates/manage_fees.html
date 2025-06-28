@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Керування внесками - Клуб спортивних ігор</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Керування членськими внесками</h1>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <a href="{{ url_for('logout') }}">Вийти</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Увійти</a> | 
+                <a href="{{ url_for('register') }}">Зареєструватися</a>
+            {% endif %}
+        </div>
+
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}">Події</a>
+            <a href="{{ url_for('announcements') }}">Оголошення</a>
+            <a href="{{ url_for('polls') }}">Опитування</a>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('add_announcement') }}" class="admin-action">Додати оголошення</a>
+                <a href="{{ url_for('create_poll') }}" class="admin-action">Створити опитування</a>
+                <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+            {% endif %}
+        </nav>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="user-fees-list">
+            {% if users %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ім'я користувача</th>
+                            <th>Статус внесків</th>
+                            <th>Дія</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                            <tr>
+                                <td>{{ user.username }}</td>
+                                <td>
+                                    {% if user.get('has_paid_fees', False) %}
+                                        <span class="fee-paid-status">Сплачено &#10003;</span>
+                                    {% else %}
+                                        <span class="fee-unpaid-status">Не сплачено &#10007;</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form action="{{ url_for('toggle_fee_status', user_id=user.id) }}" method="POST">
+                                        <button type="submit" class="small-button">
+                                            {% if user.get('has_paid_fees', False) %}
+                                                Відмітити як "Не сплачено"
+                                            {% else %}
+                                                Відмітити як "Сплачено"
+                                            {% endif %}
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>Немає зареєстрованих користувачів.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

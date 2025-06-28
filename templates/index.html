@@ -21,10 +21,21 @@
             {% endif %}
         </div>
 
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}">Події</a>
+            <a href="{{ url_for('announcements') }}">Оголошення</a>
+            <a href="{{ url_for('polls') }}">Опитування</a>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('add_announcement') }}" class="admin-action">Додати оголошення</a>
+                <a href="{{ url_for('create_poll') }}" class="admin-action">Створити опитування</a>
+                <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a> {# Нове посилання #}
+            {% endif %}
+        </nav>
+
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             <ul class="flashes">
-            {% for category, message in messages %}.
+            {% for category, message in messages %}
               <li class="{{ category }}">{{ message }}</li>
             {% endfor %}
             </ul>
@@ -55,7 +66,13 @@
                         <p>Учасників: <strong>{{ event.participants | length }}</strong></p>
                         <ul>
                             {% for participant in event.participants %}
-                                <li>{{ participant }}</li>
+                                <li>
+                                    {{ participant }}
+                                    {# Додаємо позначку, якщо користувач сплатив внески #}
+                                    {% if users_fee_status[participant] is defined and users_fee_status[participant] %}
+                                        <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span> {# HTML-код для галочки #}
+                                    {% endif %}
+                                </li>
                             {% else %}
                                 <li>Поки що ніхто не зареєструвався.</li>
                             {% endfor %}
