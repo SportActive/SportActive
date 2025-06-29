@@ -563,3 +563,19 @@ textarea.drag-over {
 .info-message a:hover {
     text-decoration: underline;
 }
+/* Стилі для інформації про участь та позначки "Відмовився" */
+.participation-info {
+    font-size: 0.85em;
+    color: #6c757d;
+    margin-left: 10px;
+}
+
+.cancelled-badge {
+    background-color: #ffc107; /* Жовтий колір для позначки */
+    color: #343a40;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-left: 5px;
+    font-size: 0.9em;
+}

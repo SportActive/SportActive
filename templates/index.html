@@ -61,14 +61,31 @@
                 {% for event in events %}
                     <div class="event-card">
                         <h3>{{ event.name }} - {{ event.date }}</h3>
-                        <p>Учасників: <strong>{{ event.participants | length }}</strong></p>
+                        {# Підраховуємо лише активних учасників #}
+                        {% set active_participants_count = 0 %}
+                        {% for p_entry in event.participants %}
+                            {% if p_entry.status == 'active' %}
+                                {% set active_participants_count = active_participants_count + 1 %}
+                            {% endif %}
+                        {% endfor %}
+                        <p>Учасників: <strong>{{ active_participants_count }}</strong></p>
+                        
+                        <h4>Список учасників:</h4> {# Новий заголовок для ясності #}
                         <ul>
-                            {% for participant in event.participants %}
+                            {# Перебираємо записи учасників #}
+                            {% for p_entry in event.participants %}
                                 <li>
-                                    {{ participant }}
-                                    {% if users_fee_status[participant] is defined and users_fee_status[participant] %}
+                                    {{ p_entry.username }} 
+                                    {% if users_fee_status[p_entry.username] is defined and users_fee_status[p_entry.username] %}
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
+                                    {# Відображаємо час підтвердження та статус #}
+                                    <span class="participation-info">
+                                        (Зареєстровано: {{ p_entry.timestamp | default('Н/Д') }}
+                                        {% if p_entry.status == 'cancelled' %}
+                                            <span class="cancelled-badge">Відмовився</span>
+                                        {% endif %})
+                                    </span>
                                 </li>
                             {% else %}
                                 <li>Поки що ніхто не зареєструвався.</li>
@@ -93,7 +110,15 @@
                         {% if current_user.is_authenticated %}
                             <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST">
                                 <button type="submit">
-                                    {% if current_user.username in event.participants %}
+                                    {# Перевіряємо, чи поточний користувач активний учасник #}
+                                    {% set user_is_active_participant = false %}
+                                    {% for p_entry in event.participants %}
+                                        {% if p_entry.username == current_user.username and p_entry.status == 'active' %}
+                                            {% set user_is_active_participant = true %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% if user_is_active_participant %}
                                         Скасувати участь
                                     {% else %}
                                         Я зможу
