@@ -55,19 +55,17 @@
             </div>
         {% elif current_user.is_authenticated %}
             {# Цей блок відображається, якщо користувач авторизований, але не є адміном #}
-            {# ЗМІНА: Прибираємо напис "Лише адміністратори можуть додавати події." #}
             {# <div class="add-event-section info-message-box"> #}
             {#     <p>Лише адміністратори можуть додавати події.</p> #}
             {# </div> #}
         {% else %}
             {# Цей блок відображається, якщо користувач не авторизований #}
-            {# ЗМІНА: Прибираємо напис "Будь ласка, увійдіть..." #}
             {# <div class="add-event-section info-message-box"> #}
             {#     <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб додавати події.</p> #}
             {# </div> #}
         {% endif %}
 
-        {# НОВЕ: Персональний календар подій на 7 днів #}
+        {# Персональний календар подій на 7 днів #}
         {% if current_user.is_authenticated and user_events_next_7_days %}
             <div class="personal-calendar-section">
                 <h2>Ваші події на наступні 7 днів</h2>
@@ -113,8 +111,21 @@
                                     {% if users_fee_status[p_entry.username] is defined and users_fee_status[p_entry.username] %}
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
+                                    
+                                    {# ЗМІНА ТУТ: Додаємо назву команди, якщо учасник є в ній #}
+                                    {% set team_name_for_participant = '' %}
+                                    {% for team_name, members in event.teams.items() %}
+                                        {% if p_entry.username in members %}
+                                            {% set team_name_for_participant = team_name %}
+                                            {% break %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% if team_name_for_participant %}
+                                        <span class="team-name-badge">{{ team_name_for_participant }}</span>
+                                    {% endif %}
+
                                     <span class="participation-info">
-                                        {# ЗМІНА: "Зареєстровано" на "Запис" #}
                                         (Запис: {{ p_entry.timestamp | default('Н/Д') }}
                                         {% if p_entry.status == 'cancelled' %}
                                             <span class="cancelled-badge">Відмовився</span>
@@ -126,6 +137,7 @@
                             {% endfor %}
                         </ul>
 
+                        {# Блок "Розподіл по командам" залишаємо, але його можна приховати/показати за бажанням #}
                         {% if event.teams %}
                             <div class="teams-display">
                                 <h4>Розподіл по командам:</h4>

@@ -853,3 +853,15 @@ h4 {
 .team-block textarea {
     width: calc(100% - 30px); /* Учитываем padding */
 }
+
+/* Стиль для відображення назви команди біля імені учасника */
+.team-name-badge {
+    background-color: #007bff; /* Синій колір */
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin-left: 8px;
+    display: inline-block; /* Щоб був на одному рядку з іменем */
+}
