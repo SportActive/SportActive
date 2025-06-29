@@ -59,7 +59,10 @@ form {
 
 form input[type="text"],
 form input[type="date"],
-form input[type="password"] {
+form input[type="password"],
+form input[type="url"], /* НОВОЕ: Стиль для URL-поля */
+form input[type="datetime-local"], /* НОВОЕ: Стиль для поля даты и времени */
+form textarea {
     padding: 12px 15px; /* Увеличим padding */
     border: 1px solid #c0d3eb; /* Более мягкий цвет рамки */
     border-radius: 8px; /* Скруглим углы */
@@ -71,7 +74,10 @@ form input[type="password"] {
 
 form input[type="text"]:focus,
 form input[type="date"]:focus,
-form input[type="password"]:focus {
+form input[type="password"]:focus,
+form input[type="url"]:focus, /* НОВОЕ */
+form input[type="datetime-local"]:focus, /* НОВОЕ */
+form textarea:focus {
     border-color: #007bff;
     box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Эффект свечения при фокусе */
     outline: none;
@@ -115,12 +121,24 @@ form button:active {
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
+/* НОВОЕ: Стиль для изображений событий */
+.event-image {
+    max-width: 100px; /* Максимальна ширина зображення */
+    max-height: 100px; /* Максимальна висота зображення */
+    float: right; /* Обтікання текстом справа */
+    margin-left: 15px; /* Відступ від тексту */
+    margin-bottom: 10px; /* Відступ знизу */
+    border-radius: 8px; /* Заокруглені кути */
+    object-fit: cover; /* Зберігаємо пропорції та обрізаємо, якщо потрібно */
+}
+
 .event-card h3 {
     margin-top: 0;
     margin-bottom: 15px;
     text-align: left;
     color: #4a698a; /* Цвет заголовка карточки */
     font-size: 1.5em;
+    overflow: hidden; /* Чтобы текст не вылазил за изображение */
 }
 
 .event-card p {
@@ -223,62 +241,241 @@ form button:active {
     border: 1px solid #c3e6cb;
 }
 
-/* Сообщения вместо форм для неавторизованных/не-админов */
-.add-event-section p,
-.event-card p {
+/* Стилі для повідомлень про доступ до форм (як на сторінках оголошень/опитувань) */
+.info-message-box {
     text-align: center;
-    color: #666;
-    margin-top: 20px;
+    padding: 20px;
+    background-color: #e6f7ff;
+    border: 1px solid #91d5ff;
+    color: #084c7c;
+    border-radius: 8px;
+    margin: 30px auto; /* Центрируем */
+    max-width: 600px;
+    font-size: 1.1em;
 }
 
-.add-event-section p a,
-.event-card p a {
-    color: #007bff;
-    text-decoration: none;
+.info-message-box p {
+    margin: 0;
+}
+
+.info-message-box a {
+    color: #0056b3;
     font-weight: bold;
+    text-decoration: none;
 }
 
-.add-event-section p a:hover,
-.event-card p a:hover {
+.info-message-box a:hover {
     text-decoration: underline;
 }
 
-/* Адаптивность для маленьких экранов */
-@media (max-width: 768px) {
-    .container {
-        padding: 20px;
-        margin: 10px;
-    }
-
-    h1 {
-        font-size: 2em;
-    }
-
-    h2 {
-        font-size: 1.5em;
-    }
-
-    form {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    form input[type="text"],
-    form input[type="date"],
-    form input[type="password"],
-    form button {
-        width: 100%; /* Занимают всю ширину */
-        min-width: unset;
-    }
-
-    .auth-links {
-        text-align: center;
-    }
-    
-    .auth-links a {
-        margin: 0 5px;
-    }
+/* --- Нові стилі для навігації --- */
+.main-nav {
+    text-align: center;
+    margin: 20px 0 30px 0;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 15px;
 }
+
+.main-nav a {
+    display: inline-block;
+    margin: 0 15px;
+    padding: 8px 15px;
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.1em;
+    border-radius: 6px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.main-nav a:hover {
+    background-color: #e0f2ff;
+    color: #0056b3;
+}
+
+.main-nav a.admin-action {
+    background-color: #28a745; /* Зеленый для админ-действий */
+    color: white;
+    margin-left: 25px; /* Немного отступить */
+}
+
+.main-nav a.admin-action:hover {
+    background-color: #218838;
+}
+
+/* --- Стилі для Оголошень --- */
+.announcements-list {
+    margin-top: 30px;
+}
+
+.announcement-card {
+    background-color: #f8fbfd;
+    border: 1px solid #e0e9f0;
+    border-radius: 10px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.announcement-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.announcement-card h3 {
+    text-align: left;
+    color: #4a698a;
+    font-size: 1.6em;
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.announcement-card p {
+    color: #555;
+    line-height: 1.6;
+    margin-bottom: 8px;
+}
+
+.announcement-card .announcement-meta {
+    font-size: 0.9em;
+    color: #777;
+    margin-bottom: 15px;
+    border-bottom: 1px dashed #eee;
+    padding-bottom: 10px;
+}
+
+/* Стиль для форм добавления/создания (узкие формы) */
+.form-narrow {
+    max-width: 600px;
+    margin: 0 auto; /* Центрируем форму */
+    padding: 20px;
+    background-color: #f8fbfd;
+    border: 1px solid #e0e9f0;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.form-narrow textarea {
+    width: calc(100% - 30px); /* Учитываем padding */
+    padding: 12px 15px;
+    border: 1px solid #c0d3eb;
+    border-radius: 8px;
+    font-size: 1em;
+    resize: vertical; /* Разрешить изменение размера только по вертикали */
+    min-height: 100px;
+    margin-bottom: 15px; /* Отступ после textarea */
+}
+
+/* --- Стилі для Опитувань --- */
+.polls-list {
+    margin-top: 30px;
+}
+
+.poll-card {
+    background-color: #f8fbfd;
+    border: 1px solid #e0e9f0;
+    border-radius: 10px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.poll-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.poll-card h3 {
+    text-align: left;
+    color: #4a698a;
+    font-size: 1.6em;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.poll-card .poll-meta {
+    font-size: 0.9em;
+    color: #777;
+    margin-bottom: 15px;
+    border-bottom: 1px dashed #eee;
+    padding-bottom: 10px;
+}
+
+.poll-card .poll-option-label {
+    display: block; /* Каждый вариант ответа на новой строке */
+    margin-bottom: 10px;
+    font-size: 1.1em;
+    color: #444;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 5px;
+    transition: background-color 0.2s ease;
+}
+
+.poll-card .poll-option-label:hover {
+    background-color: #eef2f5;
+}
+
+.poll-card input[type="radio"] {
+    margin-right: 10px;
+    transform: scale(1.2); /* Увеличим размер радио-кнопок */
+}
+
+.poll-card button {
+    margin-top: 15px;
+    width: auto; /* Кнопка не должна быть на всю ширину */
+    padding: 10px 20px;
+}
+
+.poll-results {
+    background-color: #eef2f5;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.poll-results p {
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333;
+    text-align: left;
+}
+
+.poll-results ul {
+    list-style: none;
+    padding: 0;
+}
+
+.poll-results ul li {
+    background-color: #fff;
+    border-left: 4px solid #007bff;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1em;
+    color: #333;
+}
+
+.poll-results ul li:last-child {
+    margin-bottom: 0;
+}
+
+.poll-results .voted-message {
+    text-align: center;
+    color: #0c5460;
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: normal;
+    margin-top: 15px;
+}
+
 /* --- Стилі для badges та списку користувачів --- */
 .fee-paid-badge {
     color: #28a745; /* Зелений колір */
@@ -345,6 +542,7 @@ form button:active {
 .small-button:hover {
     background-color: #0056b3;
 }
+
 /* --- Стилі для розподілу по командам --- */
 .teams-display {
     margin-top: 25px;
@@ -517,6 +715,54 @@ textarea.drag-over {
 
 /* Адаптивность для маленьких экранов */
 @media (max-width: 768px) {
+    .container {
+        padding: 20px;
+        margin: 10px;
+    }
+
+    h1 {
+        font-size: 2em;
+    }
+
+    h2 {
+        font-size: 1.5em;
+    }
+
+    form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    form input[type="text"],
+    form input[type="date"],
+    form input[type="password"],
+    form input[type="url"],
+    form input[type="datetime-local"],
+    form textarea,
+    form button {
+        width: 100%; /* Занимают всю ширину */
+        min-width: unset;
+    }
+
+    .auth-links {
+        text-align: center;
+    }
+    
+    .auth-links a {
+        margin: 0 5px;
+    }
+
+    .main-nav a {
+        margin: 0 8px;
+        padding: 6px 10px;
+        font-size: 1em;
+    }
+
+    .main-nav a.admin-action {
+        margin-top: 10px;
+        display: block;
+    }
+
     .team-management-section {
         flex-direction: column;
     }
@@ -525,45 +771,22 @@ textarea.drag-over {
         min-width: unset;
         width: 100%;
     }
-}
-/* Дополнительные стили для секций форм на страницах объявлений/опросов */
-.form-section {
-    background-color: #f0f4f7;
-    padding: 30px;
-    border-radius: 10px;
-    margin-bottom: 40px;
-    box-shadow: inset 0 1px 5px rgba(0,0,0,0.05); /* Внутренняя тень */
+
+    .form-narrow {
+        padding: 15px;
+    }
 }
 
-.form-section h2 {
-    text-align: center;
-    color: #0056b3;
-    margin-top: 0;
-    margin-bottom: 25px;
-    border-bottom: none; /* Убираем черту под заголовком */
+
+/* Нові стилі для списку учасників та календаря подій */
+h4 {
+    color: #4a698a;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 1.3em;
+    text-align: left;
 }
 
-.info-message {
-    text-align: center;
-    padding: 15px;
-    background-color: #e6f7ff;
-    border: 1px solid #91d5ff;
-    color: #084c7c;
-    border-radius: 8px;
-    margin: 20px 0;
-    font-size: 1.1em;
-}
-
-.info-message a {
-    color: #0056b3;
-    font-weight: bold;
-    text-decoration: none;
-}
-
-.info-message a:hover {
-    text-decoration: underline;
-}
-/* Стилі для інформації про участь та позначки "Відмовився" */
 .participation-info {
     font-size: 0.85em;
     color: #6c757d;
@@ -579,44 +802,54 @@ textarea.drag-over {
     margin-left: 5px;
     font-size: 0.9em;
 }
-/* Стилі для повідомлень про доступ до форм (як на сторінках оголошень/опитувань) */
-.info-message-box {
-    text-align: center;
-    padding: 20px;
-    background-color: #e6f7ff;
-    border: 1px solid #91d5ff;
-    color: #084c7c;
-    border-radius: 8px;
-    margin: 30px auto; /* Центрируем */
-    max-width: 600px;
-    font-size: 1.1em;
+
+/* Стилі для персонального календаря подій */
+.personal-calendar-section {
+    background-color: #eef2f5;
+    padding: 25px;
+    border-radius: 10px;
+    margin-top: 40px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 
-.info-message-box p {
-    margin: 0;
-}
-
-.info-message-box a {
+.personal-calendar-section h2 {
     color: #0056b3;
-    font-weight: bold;
-    text-decoration: none;
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 20px;
 }
 
-.info-message-box a:hover {
-    text-decoration: underline;
-}
-/* Стиль для зображень подій */
-.event-image {
-    max-width: 100px; /* Максимальна ширина зображення */
-    max-height: 100px; /* Максимальна висота зображення */
-    float: right; /* Обтікання текстом справа */
-    margin-left: 15px; /* Відступ від тексту */
-    margin-bottom: 10px; /* Відступ знизу */
-    border-radius: 8px; /* Заокруглені кути */
-    object-fit: cover; /* Зберігаємо пропорції та обрізаємо, якщо потрібно */
+.personal-calendar-section ul {
+    list-style: none;
+    padding: 0;
 }
 
-/* Якщо зображення зліва */
-.event-card h3 {
-    overflow: hidden; /* Щоб текст не вилазив за зображення */
+.personal-calendar-section ul li {
+    background-color: #fff;
+    border-left: 4px solid #28a745; /* Зелена лінія для своїх подій */
+    padding: 12px 15px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.03);
+    font-size: 1.05em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap; /* Для переноса содержимого на маленьких экранах */
+}
+
+.personal-calendar-section ul li strong {
+    color: #333;
+}
+
+.personal-calendar-section ul li span {
+    font-size: 0.9em;
+    color: #666;
+    margin-left: 10px;
+}
+
+/* Отступы для элементов формы в manage_teams */
+.team-block input[type="text"],
+.team-block textarea {
+    width: calc(100% - 30px); /* Учитываем padding */
 }

@@ -54,12 +54,34 @@
                 </form>
             </div>
         {% elif current_user.is_authenticated %}
-            <div class="add-event-section info-message-box">
-                <p>Лише адміністратори можуть додавати події.</p>
-            </div>
+            {# Цей блок відображається, якщо користувач авторизований, але не є адміном #}
+            {# ЗМІНА: Прибираємо напис "Лише адміністратори можуть додавати події." #}
+            {# <div class="add-event-section info-message-box"> #}
+            {#     <p>Лише адміністратори можуть додавати події.</p> #}
+            {# </div> #}
         {% else %}
-            <div class="add-event-section info-message-box">
-                <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб додавати події.</p>
+            {# Цей блок відображається, якщо користувач не авторизований #}
+            {# ЗМІНА: Прибираємо напис "Будь ласка, увійдіть..." #}
+            {# <div class="add-event-section info-message-box"> #}
+            {#     <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб додавати події.</p> #}
+            {# </div> #}
+        {% endif %}
+
+        {# НОВЕ: Персональний календар подій на 7 днів #}
+        {% if current_user.is_authenticated and user_events_next_7_days %}
+            <div class="personal-calendar-section">
+                <h2>Ваші події на наступні 7 днів</h2>
+                <ul>
+                    {% for event in user_events_next_7_days %}
+                        <li>
+                            <strong>{{ event.name }}</strong> <span>( {{ event.date }} )</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% elif current_user.is_authenticated %}
+            <div class="personal-calendar-section info-message-box">
+                <p>У вас немає запланованих подій на наступні 7 днів.</p>
             </div>
         {% endif %}
 
@@ -69,7 +91,7 @@
             {% if events %}
                 {% for event in events %}
                     <div class="event-card">
-                        {# НОВЕ: Відображення зображення #}
+                        {# Відображення зображення #}
                         {% if event.image_url %}
                             <img src="{{ event.image_url }}" alt="{{ event.name }}" class="event-image">
                         {% endif %}
@@ -92,7 +114,8 @@
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
                                     <span class="participation-info">
-                                        (Зареєстровано: {{ p_entry.timestamp | default('Н/Д') }}
+                                        {# ЗМІНА: "Зареєстровано" на "Запис" #}
+                                        (Запис: {{ p_entry.timestamp | default('Н/Д') }}
                                         {% if p_entry.status == 'cancelled' %}
                                             <span class="cancelled-badge">Відмовився</span>
                                         {% endif %})

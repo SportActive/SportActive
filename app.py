@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import json 
 
 app = Flask(__name__)
+# ВАЖНО: Секретный ключ теперь может быть взят из переменной окручения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -47,9 +48,7 @@ class User(db.Model, UserMixin):
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    # ЗМІНА ТУТ: date тепер зберігає дату та час
-    date = db.Column(db.String(20), nullable=False) # Формат YYYY-MM-DD HH:MM:SS
-    # НОВЕ ПОЛЕ: image_url
+    date = db.Column(db.String(20), nullable=False)
     image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
@@ -179,11 +178,40 @@ def logout():
 
 @app.route('/')
 def index():
-    # ЗМІНА ТУТ: Сортуємо події також за часом
-    events = Event.query.order_by(Event.date).all()
+    # Зміна тут: Сортуємо події також за часом
+    all_events = Event.query.order_by(Event.date).all()
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
-    return render_template('index.html', events=events, current_user=current_user, users_fee_status=users_fee_status)
+
+    user_events_next_7_days = []
+    if current_user.is_authenticated:
+        now = datetime.now()
+        seven_days_from_now = now + timedelta(days=7)
+        for event in all_events:
+            # Перевіряємо, чи користувач є активним учасником
+            is_participant = False
+            for p_entry in event.participants:
+                if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
+                    is_participant = True
+                    break
+            
+            # Якщо користувач учасник, перевіряємо дату
+            if is_participant:
+                try:
+                    event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+                    # Перевіряємо, чи подія в майбутньому (сьогодні або пізніше)
+                    # і чи вона відбудеться протягом наступних 7 днів
+                    if event_dt >= now and event_dt <= seven_days_from_now:
+                        user_events_next_7_days.append(event)
+                except ValueError:
+                    # Ігноруємо події з неправильним форматом дати
+                    continue
+    
+    return render_template('index.html', 
+                           events=all_events, 
+                           current_user=current_user, 
+                           users_fee_status=users_fee_status,
+                           user_events_next_7_days=user_events_next_7_days) # Передаємо новий список
 
 @app.route('/add_event', methods=['POST'])
 @login_required
@@ -193,24 +221,18 @@ def add_event():
         return redirect(url_for('index'))
 
     event_name = request.form['event_name']
-    # ЗМІНА ТУТ: Отримуємо дату і час
     event_datetime_str = request.form['event_datetime'] 
-    image_url = request.form.get('image_url') # НОВЕ: отримуємо image_url
+    image_url = request.form.get('image_url') 
 
     if event_name and event_datetime_str:
-        # Перетворюємо рядок дати/часу в потрібний формат для зберігання
         try:
-            # Перевіряємо, чи можна розпарсити дату/час.
-            # Якщо користувач ввів неповну дату або неправильний формат, може виникнути помилка.
-            # Якщо HTML5 input type="datetime-local" використовується, формат буде 'YYYY-MM-DDTHH:MM'
-            # Треба перетворити його на 'YYYY-MM-DD HH:MM:SS' для зберігання
             dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
             formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
         except ValueError:
-            flash('Неправильний формат дати або часу. Використовуйте YYYY-MM-DD HH:MM.', 'error')
+            flash('Неправильний формат дати або часу. Використовуйте РРРР-ММ-ДД HH:MM.', 'error')
             return redirect(url_for('index'))
 
-        new_event = Event(name=event_name, date=formatted_datetime, participants_json='[]', teams_json='{}', image_url=image_url if image_url else None) # НОВЕ: зберігаємо image_url
+        new_event = Event(name=event_name, date=formatted_datetime, participants_json='[]', teams_json='{}', image_url=image_url if image_url else None)
         db.session.add(new_event)
         db.session.commit()
         flash('Подію успішно додано!', 'success')
