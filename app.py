@@ -21,14 +21,8 @@ db = SQLAlchemy(app) # Инициализируем SQLAlchemy
 # === ГАРАНТОВАНЕ СТВОРЕННЯ ТАБЛИЦЬ ПРИ ЗАПУСКУ ===
 # Цей блок створить всі таблиці в БД, якщо їх ще немає.
 # Це рішення для проблем з UndefinedTable на Render.
-with app.app_context():
-    db.create_all() 
-# ======================================================================
 
-# Делаем 'enumerate' доступным во всех Jinja2 шаблонах
-@app.context_processor
-def utility_processor():
-    return dict(enumerate=enumerate)
+
 
 # --- Настройка Flask-Login ---
 login_manager = LoginManager()
@@ -440,5 +434,7 @@ def save_teams(event_id):
 
 if __name__ == '__main__':
     # Цей блок запускається тільки при локальному запуску 'python app.py'
-    # На Render, db.create_all() тепер викликається вище, одразу після db = SQLAlchemy(app)
+    # На Render, db.create_all() тепер буде викликатися через Build Command.
+    with app.app_context(): 
+        db.create_all() # Цей рядок ПОВИНЕН ЗАЛИШИТИСЯ ТУТ ДЛЯ ЛОКАЛЬНОГО ЗАПУСКУ
     app.run(debug=True)
