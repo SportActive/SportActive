@@ -579,3 +579,29 @@ textarea.drag-over {
     margin-left: 5px;
     font-size: 0.9em;
 }
+/* Стилі для повідомлень про доступ до форм (як на сторінках оголошень/опитувань) */
+.info-message-box {
+    text-align: center;
+    padding: 20px;
+    background-color: #e6f7ff;
+    border: 1px solid #91d5ff;
+    color: #084c7c;
+    border-radius: 8px;
+    margin: 30px auto; /* Центрируем */
+    max-width: 600px;
+    font-size: 1.1em;
+}
+
+.info-message-box p {
+    margin: 0;
+}
+
+.info-message-box a {
+    color: #0056b3;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.info-message-box a:hover {
+    text-decoration: underline;
+}

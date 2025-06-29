@@ -40,20 +40,28 @@
           {% endif %}
         {% endwith %}
 
-        <div class="add-event-section">
-            <h2>Додати нову подію</h2>
-            {% if current_user.is_authenticated and current_user.is_admin() %}
+        {# ЗМІНА ТУТ: Поле "Додати нову подію" тепер відображається тільки для адміністраторів #}
+        {% if current_user.is_authenticated and current_user.is_admin() %}
+            <div class="add-event-section">
+                <h2>Додати нову подію</h2>
                 <form action="{{ url_for('add_event') }}" method="POST">
                     <input type="text" name="event_name" placeholder="Назва події (напр. Бадмінтон)" required>
                     <input type="date" name="event_date" required>
                     <button type="submit">Додати подію</button>
                 </form>
-            {% elif current_user.is_authenticated %}
+            </div>
+        {% elif current_user.is_authenticated %}
+            {# Цей блок відображається, якщо користувач авторизований, але не є адміном #}
+            <div class="add-event-section info-message-box">
                 <p>Лише адміністратори можуть додавати події.</p>
-            {% else %}
-                <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a>, щоб додавати події.</p>
-            {% endif %}
-        </div>
+            </div>
+        {% else %}
+            {# Цей блок відображається, якщо користувач не авторизований #}
+            <div class="add-event-section info-message-box">
+                <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб додавати події.</p>
+            </div>
+        {% endif %}
+
 
         <div class="events-list">
             <h2>Майбутні події</h2>
@@ -70,16 +78,14 @@
                         {% endfor %}
                         <p>Учасників: <strong>{{ active_participants_count }}</strong></p>
                         
-                        <h4>Список учасників:</h4> {# Новий заголовок для ясності #}
+                        <h4>Список учасників:</h4>
                         <ul>
-                            {# Перебираємо записи учасників #}
                             {% for p_entry in event.participants %}
                                 <li>
                                     {{ p_entry.username }} 
                                     {% if users_fee_status[p_entry.username] is defined and users_fee_status[p_entry.username] %}
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
-                                    {# Відображаємо час підтвердження та статус #}
                                     <span class="participation-info">
                                         (Зареєстровано: {{ p_entry.timestamp | default('Н/Д') }}
                                         {% if p_entry.status == 'cancelled' %}
@@ -110,7 +116,6 @@
                         {% if current_user.is_authenticated %}
                             <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST">
                                 <button type="submit">
-                                    {# Перевіряємо, чи поточний користувач активний учасник #}
                                     {% set user_is_active_participant = false %}
                                     {% for p_entry in event.participants %}
                                         {% if p_entry.username == current_user.username and p_entry.status == 'active' %}
