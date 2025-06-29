@@ -18,10 +18,14 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Отключаем отс
 
 db = SQLAlchemy(app) # Инициализируем SQLAlchemy
 
-# === ГАРАНТОВАНЕ СТВОРЕННЯ ТАБЛИЦЬ ПРИ ЗАПУСКУ ===
-# Цей блок створить всі таблиці в БД, якщо їх ще немає.
-# Це рішення для проблем з UndefinedTable на Render.
+# === ВИДАЛІТЬ ЦЕЙ БЛОК ===
+# with app.app_context():
+#     db.create_all() 
+# ========================
 
+@app.context_processor
+def utility_processor():
+    return dict(enumerate=enumerate)
 
 
 # --- Настройка Flask-Login ---
