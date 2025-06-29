@@ -117,7 +117,7 @@
                                     {% for team_name, members in event.teams.items() %}
                                         {% if p_entry.username in members %}
                                             {% set team_name_for_participant = team_name %}
-                                            {# ВИДАЛЕНО: {% break %} #}
+                                            {# ВИДАЛИТИ РЯДОК З {% break %} #}
                                         {% endif %}
                                     {% endfor %}
 
