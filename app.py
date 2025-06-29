@@ -16,8 +16,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app) 
 
-with app.app_context():
-    db.create_all() 
+# === ЦЬОГО БЛОКУ ТУТ БУТИ НЕ ПОВИННО ===
+# with app.app_context():
+#     db.create_all() 
+# ======================================
 
 @app.context_processor
 def utility_processor():

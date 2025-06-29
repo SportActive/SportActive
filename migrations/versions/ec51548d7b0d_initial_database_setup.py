@@ -1,8 +1,8 @@
 """Initial database setup
 
-Revision ID: 51d85e751b78
+Revision ID: ec51548d7b0d
 Revises: 
-Create Date: 2025-06-29 19:58:08.821546
+Create Date: 2025-06-29 20:59:02.697451
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '51d85e751b78'
+revision: str = 'ec51548d7b0d'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -32,7 +32,8 @@ def upgrade() -> None:
     op.create_table('event',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
-    sa.Column('date', sa.String(length=10), nullable=False),
+    sa.Column('date', sa.String(length=20), nullable=False),
+    sa.Column('image_url', sa.String(length=255), nullable=True),
     sa.Column('participants_json', sa.Text(), nullable=True),
     sa.Column('teams_json', sa.Text(), nullable=True),
     sa.PrimaryKeyConstraint('id')
