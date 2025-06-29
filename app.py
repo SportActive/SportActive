@@ -18,6 +18,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Отключаем отс
 
 db = SQLAlchemy(app) # Инициализируем SQLAlchemy
 
+# --- ЗМІНА ТУТ: Додаємо 'enumerate' до глобальних функцій Jinja2 ---
+@app.context_processor
+def utility_processor():
+    return dict(enumerate=enumerate)
+
 # --- Настройка Flask-Login ---
 login_manager = LoginManager()
 login_manager.init_app(app)
