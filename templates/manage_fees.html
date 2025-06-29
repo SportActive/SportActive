@@ -55,7 +55,8 @@
                             <tr>
                                 <td>{{ user.username }}</td>
                                 <td>
-                                    {% if user.get('has_paid_fees', False) %}
+                                    {# ЗМІНА ТУТ: Доступ до атрибута через крапку #}
+                                    {% if user.has_paid_fees %}
                                         <span class="fee-paid-status">Сплачено &#10003;</span>
                                     {% else %}
                                         <span class="fee-unpaid-status">Не сплачено &#10007;</span>
@@ -64,7 +65,8 @@
                                 <td>
                                     <form action="{{ url_for('toggle_fee_status', user_id=user.id) }}" method="POST">
                                         <button type="submit" class="small-button">
-                                            {% if user.get('has_paid_fees', False) %}
+                                            {# ЗМІНА ТУТ: Доступ до атрибута через крапку #}
+                                            {% if user.has_paid_fees %}
                                                 Відмітити як "Не сплачено"
                                             {% else %}
                                                 Відмітити як "Сплачено"
