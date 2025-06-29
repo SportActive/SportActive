@@ -28,7 +28,7 @@ login_manager.login_view = 'login'
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), default='user') # 'user' или 'admin'
     has_paid_fees = db.Column(db.Boolean, default=False)
 
