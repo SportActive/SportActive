@@ -1,95 +1,131 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-import json
+from flask_sqlalchemy import SQLAlchemy # Імпортуємо SQLAlchemy
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import json # Залишаємо для тимчасового використання або якщо потрібен для інших цілей
 
 app = Flask(__name__)
-app.secret_key = 'your_super_secret_key_here_please_change_this' # ВАЖНО: Замените на случайную, сложную строку!
+# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
+app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
+
+# --- Настройка SQLAlchemy ---
+# Берем URL базы данных из переменной окружения DATABASE_URL
+# Это стандартная практика для хостингов типа Render
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///site.db') 
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Отключаем отслеживание изменений, чтобы избежать предупреждений
+
+db = SQLAlchemy(app) # Инициализируем SQLAlchemy
 
 # --- Настройка Flask-Login ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Файлы для хранения данных
-DATA_FILE = 'events.json'
-USERS_FILE = 'users.json'
-ANNOUNCEMENTS_FILE = 'announcements.json'
-POLLS_FILE = 'polls.json'
+# --- Модели базы данных ---
+# Теперь User - это модель SQLAlchemy
+class User(db.Model, UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    role = db.Column(db.String(20), default='user') # 'user' или 'admin'
+    has_paid_fees = db.Column(db.Boolean, default=False)
 
-# --- Модель пользователя для Flask-Login ---
-class User(UserMixin):
-    def __init__(self, id, username, password_hash, role='user', has_paid_fees=False):
-        self.id = id
-        self.username = username
-        self.password_hash = password_hash
-        self.role = role
-        self.has_paid_fees = has_paid_fees
+    # Добавляем отношения с другими моделями (пока закомментируем, добавим позже)
+    # events = db.relationship('Event', secondary='event_participants', backref=db.backref('users', lazy='dynamic'))
+    # announcements = db.relationship('Announcement', backref='author_user', lazy=True)
+    # polls = db.relationship('Poll', backref='author_user', lazy=True)
 
     def is_admin(self):
         return self.role == 'admin'
 
-    @staticmethod
-    def get(user_id):
-        users = load_users()
-        for user_data in users:
-            if str(user_data['id']) == str(user_id):
-                return User(user_data['id'], user_data['username'], user_data['password_hash'], 
-                            user_data.get('role', 'user'), user_data.get('has_paid_fees', False))
-        return None
+    # Метод для проверки пароля
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
-# --- Функции для загрузки/сохранения данных ---
-# Добавлена более надежная загрузка, возвращает пустой список, если файла нет или он пуст
-def load_json_data(filename):
-    if os.path.exists(filename) and os.path.getsize(filename) > 0:
-        with open(filename, 'r', encoding='utf-8') as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError: # Обработка ошибки, если JSON-файл пустой или поврежден
-                return []
-    return []
+    def __repr__(self):
+        return f"User('{self.username}', '{self.role}')"
 
-def save_json_data(filename, data):
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+# Модель Event
+class Event(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.String(10), nullable=False) # Дата в формате YYYY-MM-DD
+    # participants и teams будут храниться как JSON-строки для простоты,
+    # но в идеале для teams лучше создать отдельную таблицу Team и TeamMembership
+    # Для participants можно использовать secondary table, но для начала JSON-строка
+    participants_json = db.Column(db.Text, default='[]') # Храним как JSON-строку
+    teams_json = db.Column(db.Text, default='{}') # Храним как JSON-строку
 
-# Оновлені функції для завантаження/збереження, що використовують load_json_data/save_json_data
-def load_events():
-    events = load_json_data(DATA_FILE)
-    for event in events:
-        if 'teams' not in event:
-            event['teams'] = {}
-    return events
+    # Геттеры и сеттеры для работы с JSON-полями
+    @property
+    def participants(self):
+        return json.loads(self.participants_json)
 
-def save_events(events):
-    save_json_data(DATA_FILE, events)
+    @participants.setter
+    def participants(self, value):
+        self.participants_json = json.dumps(value, ensure_ascii=False)
 
-def load_users():
-    return load_json_data(USERS_FILE)
+    @property
+    def teams(self):
+        return json.loads(self.teams_json)
 
-def save_users(users):
-    save_json_data(USERS_FILE, users)
+    @teams.setter
+    def teams(self, value):
+        self.teams_json = json.dumps(value, ensure_ascii=False)
 
-def load_announcements():
-    return load_json_data(ANNOUNCEMENTS_FILE)
+    def __repr__(self):
+        return f"Event('{self.name}', '{self.date}')"
 
-def save_announcements(announcements):
-    save_json_data(ANNOUNCEMENTS_FILE, announcements)
+# Модель Announcement
+class Announcement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(150), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    date = db.Column(db.String(20), nullable=False) # Дата и время
+    author = db.Column(db.String(80), nullable=False) # Имя автора
 
-def load_polls():
-    return load_json_data(POLLS_FILE)
+    def __repr__(self):
+        return f"Announcement('{self.title}', '{self.date}')"
 
-def save_polls(polls):
-    save_json_data(POLLS_FILE, polls)
+# Модель Poll
+class Poll(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    question = db.Column(db.String(255), nullable=False)
+    options_json = db.Column(db.Text, nullable=False) # Храним список словарей опций как JSON
+    voted_users_json = db.Column(db.Text, default='[]') # Храним список проголосовавших пользователей как JSON
+    date = db.Column(db.String(20), nullable=False)
+    author = db.Column(db.String(80), nullable=False)
 
-# --- Функция загрузки пользователя для Flask-Login ---
+    @property
+    def options(self):
+        return json.loads(self.options_json)
+
+    @options.setter
+    def options(self, value):
+        self.options_json = json.dumps(value, ensure_ascii=False)
+
+    @property
+    def voted_users(self):
+        return json.loads(self.voted_users_json)
+
+    @voted_users.setter
+    def voted_users(self, value):
+        self.voted_users_json = json.dumps(value, ensure_ascii=False)
+
+    def __repr__(self):
+        return f"Poll('{self.question}', '{self.date}')"
+
+
+# --- Загрузчик пользователя для Flask-Login ---
 @login_manager.user_loader
 def load_user(user_id):
-    return User.get(user_id)
+    # Теперь загружаем пользователя из базы данных
+    return User.query.get(int(user_id))
 
-# --- Маршруты для аутентификации (без изменений, кроме добавления has_paid_fees при регистрации) ---
+
+# --- Маршруты для аутентификации ---
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -100,21 +136,23 @@ def register():
         username = request.form['username']
         password = request.form['password']
 
-        users = load_users()
-        if any(u['username'] == username for u in users):
+        # Проверяем, существует ли пользователь уже в БД
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
             flash('Користувач з таким ім\'ям вже існує.', 'error')
             return render_template('register.html')
 
         hashed_password = generate_password_hash(password)
         
-        new_id = 1
-        if users:
-            new_id = max(u['id'] for u in users) + 1
-
-        new_user_role = 'admin' if not users else 'user' 
+        # Первый зарегистрированный пользователь становится админом
+        # Проверяем, есть ли уже пользователи в БД
+        is_first_user = (User.query.count() == 0)
+        new_user_role = 'admin' if is_first_user else 'user' 
         
-        users.append({'id': new_id, 'username': username, 'password_hash': hashed_password, 'role': new_user_role, 'has_paid_fees': False})
-        save_users(users)
+        new_user = User(username=username, password_hash=hashed_password, role=new_user_role, has_paid_fees=False)
+        db.session.add(new_user)
+        db.session.commit() # Сохраняем пользователя в БД
+        
         flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
         return redirect(url_for('login'))
     
@@ -129,16 +167,10 @@ def login():
         username = request.form['username']
         password = request.form['password']
 
-        users = load_users()
-        user_found = None
-        for user_data in users:
-            if user_data['username'] == username:
-                if check_password_hash(user_data['password_hash'], password):
-                    user_found = User(user_data['id'], user_data['username'], user_data['password_hash'], 
-                                      user_data.get('role', 'user'), user_data.get('has_paid_fees', False))
-                    break
+        # Ищем пользователя в БД
+        user_found = User.query.filter_by(username=username).first()
         
-        if user_found:
+        if user_found and user_found.check_password(password):
             login_user(user_found)
             flash('Вхід успішний!', 'success')
             next_page = request.args.get('next')
@@ -155,13 +187,15 @@ def logout():
     flash('Ви вийшли з системи.', 'info')
     return redirect(url_for('index'))
 
-# --- Основные маршруты приложения (изменена передача данных пользователей) ---
+# --- Основные маршруты приложения ---
 
 @app.route('/')
 def index():
-    events = load_events()
-    all_users_data = load_users() 
-    users_fee_status = {u['username']: u.get('has_paid_fees', False) for u in all_users_data}
+    # Загружаем события из БД
+    events = Event.query.order_by(Event.date).all()
+    # Загружаем всех пользователей для статуса взносов
+    all_users = User.query.all()
+    users_fee_status = {u.username: u.has_paid_fees for u in all_users}
     return render_template('index.html', events=events, current_user=current_user, users_fee_status=users_fee_status)
 
 @app.route('/add_event', methods=['POST'])
@@ -174,15 +208,10 @@ def add_event():
     event_name = request.form['event_name']
     event_date = request.form['event_date']
     if event_name and event_date:
-        events = load_events()
-        events.append({
-            'id': len(events) + 1,
-            'name': event_name,
-            'date': event_date,
-            'participants': [],
-            'teams': {}
-        })
-        save_events(events)
+        # Создаем новую запись Event и сохраняем в БД
+        new_event = Event(name=event_name, date=event_date, participants_json='[]', teams_json='{}')
+        db.session.add(new_event)
+        db.session.commit()
         flash('Подію успішно додано!', 'success')
     else:
         flash('Будь ласка, заповніть усі поля для події.', 'error')
@@ -193,107 +222,97 @@ def add_event():
 def toggle_participation(event_id):
     participant_name = current_user.username 
     
-    events = load_events()
-    found_event = False
-    for event in events:
-        if event['id'] == event_id:
-            found_event = True
-            if participant_name in event['participants']:
-                event['participants'].remove(participant_name)
-                for team_name in event['teams']:
-                    if participant_name in event['teams'][team_name]:
-                        event['teams'][team_name].remove(participant_name)
-                        break
-                flash(f'{participant_name}, вашу участь скасовано для "{event["name"]}".', 'info')
-            else:
-                event['participants'].append(participant_name)
-                flash(f'{participant_name}, ви успішно зареєструвалися на "{event["name"]}".', 'success')
-            break
+    # Ищем событие в БД
+    event = Event.query.get_or_404(event_id)
     
-    if not found_event:
-        flash('Подія не знайдена.', 'error')
+    participants = event.participants # Получаем список участников
+    teams = event.teams # Получаем словарь команд
 
-    save_events(events)
+    if participant_name in participants:
+        participants.remove(participant_name)
+        # Также удаляем из списка команд, если был
+        for team_name in teams:
+            if participant_name in teams[team_name]:
+                teams[team_name].remove(participant_name)
+                break 
+        flash(f'{participant_name}, вашу участь скасовано для "{event.name}".', 'info')
+    else:
+        participants.append(participant_name)
+        flash(f'{participant_name}, ви успішно зареєструвалися на "{event.name}".', 'success')
+    
+    event.participants = participants # Обновляем JSON-строку
+    event.teams = teams # Обновляем JSON-строку
+    db.session.commit() # Сохраняем изменения в БД
+
     return redirect(url_for('index'))
 
-# --- НОВЫЕ/ИЗМЕНЕННЫЕ МАРШРУТЫ ДЛЯ ОБЪЯВЛЕНИЙ ---
+# --- Маршруты для объявлений ---
 
-@app.route('/announcements', methods=['GET', 'POST']) # Теперь принимает POST запросы
+@app.route('/announcements', methods=['GET', 'POST'])
 def announcements():
-    # Логика добавления объявления (только для админов)
     if request.method == 'POST':
         if not current_user.is_authenticated or not current_user.is_admin():
             flash('У вас немає дозволу на додавання оголошень.', 'error')
-            return redirect(url_for('announcements')) # Перенаправляем на GET-версию
+            return redirect(url_for('announcements'))
 
         title = request.form['title']
         content = request.form['content']
         if title and content:
-            announcements_data = load_announcements()
-            new_id = 1
-            if announcements_data:
-                new_id = max(a['id'] for a in announcements_data) + 1
-
-            announcements_data.append({
-                'id': new_id,
-                'title': title,
-                'content': content,
-                'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'author': current_user.username
-            })
-            save_announcements(announcements_data)
+            # Создаем новую запись Announcement и сохраняем в БД
+            new_announcement = Announcement(
+                title=title,
+                content=content,
+                date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                author=current_user.username
+            )
+            db.session.add(new_announcement)
+            db.session.commit()
             flash('Оголошення успішно додано!', 'success')
             return redirect(url_for('announcements'))
         else:
             flash('Будь ласка, заповніть усі поля для оголошення.', 'error')
     
-    # Логика отображения объявлений (для GET-запросов)
-    ann = load_announcements()
-    ann.sort(key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d %H:%M:%S'), reverse=True)
+    # Загружаем объявления из БД, сортируем по дате
+    ann = Announcement.query.order_by(Announcement.date.desc()).all()
     return render_template('announcements.html', announcements=ann, current_user=current_user)
 
+# --- Маршруты для опросов ---
 
-# --- НОВЫЕ/ИЗМЕНЕННЫЕ МАРШРУТЫ ДЛЯ ОПРОСОВ ---
-
-@app.route('/polls', methods=['GET', 'POST']) # Теперь принимает POST запросы
+@app.route('/polls', methods=['GET', 'POST'])
 def polls():
-    # Логика создания опроса (только для админов)
     if request.method == 'POST':
         if not current_user.is_authenticated or not current_user.is_admin():
             flash('У вас немає дозволу на створення опитувань.', 'error')
-            return redirect(url_for('polls')) # Перенаправляем на GET-версию
+            return redirect(url_for('polls'))
 
         question = request.form['question']
         options_raw = [request.form[f'option{i}'] for i in range(1, 6) if f'option{i}' in request.form and request.form[f'option{i}']]
         
         if not question or not options_raw:
             flash('Будь ласка, заповніть питання та хоча б один варіант відповіді.', 'error')
-            return render_template('polls.html', polls=load_polls(), current_user=current_user) # Возвращаем на страницу опросов с ошибкой
+            # Важно: при возврате на страницу с ошибкой, передать текущие опросы
+            all_polls = Poll.query.order_by(Poll.date.desc()).all()
+            return render_template('polls.html', polls=all_polls, current_user=current_user)
 
-        polls_data = load_polls()
-        new_poll_id = 1
-        if polls_data:
-            new_poll_id = max(p['id'] for p in polls_data) + 1
-        
         options_for_save = []
         for opt_text in options_raw:
             options_for_save.append({'text': opt_text, 'votes': 0})
 
-        polls_data.append({
-            'id': new_poll_id,
-            'question': question,
-            'options': options_for_save,
-            'voted_users': [],
-            'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'author': current_user.username
-        })
-        save_polls(polls_data)
+        # Создаем новую запись Poll и сохраняем в БД
+        new_poll = Poll(
+            question=question,
+            options_json=json.dumps(options_for_save, ensure_ascii=False),
+            voted_users_json='[]',
+            date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            author=current_user.username
+        )
+        db.session.add(new_poll)
+        db.session.commit()
         flash('Опитування успішно створено!', 'success')
         return redirect(url_for('polls'))
     
-    # Логика отображения опросов (для GET-запросов)
-    all_polls = load_polls()
-    all_polls.sort(key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d %H:%M:%S'), reverse=True)
+    # Загружаем опросы из БД, сортируем по дате
+    all_polls = Poll.query.order_by(Poll.date.desc()).all()
     return render_template('polls.html', polls=all_polls, current_user=current_user)
 
 @app.route('/vote_poll/<int:poll_id>', methods=['POST'])
@@ -305,34 +324,34 @@ def vote_poll(poll_id):
         flash('Будь ласка, оберіть варіант для голосування.', 'error')
         return redirect(url_for('polls'))
 
-    polls_data = load_polls()
-    found_poll = False
-    for poll in polls_data:
-        if poll['id'] == poll_id:
-            found_poll = True
-            if current_user.username in poll['voted_users']:
-                flash('Ви вже проголосували в цьому опитуванні.', 'info')
-                return redirect(url_for('polls'))
-            
-            try:
-                option_index = int(vote_option_index)
-                if 0 <= option_index < len(poll['options']):
-                    poll['options'][option_index]['votes'] += 1
-                    poll['voted_users'].append(current_user.username)
-                    save_polls(polls_data)
-                    flash('Ваш голос зараховано!', 'success')
-                else:
-                    flash('Недійсний варіант голосування.', 'error')
-            except ValueError:
-                flash('Недійсний запит голосування.', 'error')
-            break
+    poll = Poll.query.get_or_404(poll_id)
     
-    if not found_poll:
-        flash('Опитування не знайдено.', 'error')
+    voted_users = poll.voted_users
+    options = poll.options
 
+    if current_user.username in voted_users:
+        flash('Ви вже проголосували в цьому опитуванні.', 'info')
+        return redirect(url_for('polls'))
+    
+    try:
+        option_index = int(vote_option_index)
+        if 0 <= option_index < len(options):
+            options[option_index]['votes'] += 1
+            voted_users.append(current_user.username)
+            
+            poll.options = options # Обновляем JSON-строку
+            poll.voted_users = voted_users # Обновляем JSON-строку
+            db.session.commit() # Сохраняем изменения в БД
+            
+            flash('Ваш голос зараховано!', 'success')
+        else:
+            flash('Недійсний варіант голосування.', 'error')
+    except ValueError:
+        flash('Недійсний запит голосування.', 'error')
+    
     return redirect(url_for('polls'))
 
-# --- Маршруты для управления взносами (без изменений) ---
+# --- Маршруты для управления взносами ---
 
 @app.route('/manage_fees')
 @login_required
@@ -341,8 +360,8 @@ def manage_fees():
         flash('У вас немає дозволу на керування внесками.', 'error')
         return redirect(url_for('index'))
     
-    users = load_users()
-    users.sort(key=lambda u: u['username'].lower())
+    # Загружаем пользователей из БД
+    users = User.query.order_by(User.username).all()
     return render_template('manage_fees.html', users=users, current_user=current_user)
 
 @app.route('/toggle_fee_status/<int:user_id>', methods=['POST'])
@@ -352,22 +371,17 @@ def toggle_fee_status(user_id):
         flash('У вас немає дозволу на керування внесками.', 'error')
         return redirect(url_for('index'))
     
-    users = load_users()
-    found_user = False
-    for user in users:
-        if user['id'] == user_id:
-            found_user = True
-            user['has_paid_fees'] = not user.get('has_paid_fees', False)
-            save_users(users)
-            flash(f'Статус внесків для {user["username"]} оновлено.', 'success')
-            break
+    # Ищем пользователя в БД
+    user = User.query.get_or_404(user_id)
     
-    if not found_user:
-        flash('Користувача не знайдено.', 'error')
+    user.has_paid_fees = not user.has_paid_fees # Изменяем статус
+    db.session.commit() # Сохраняем изменения в БД
+    
+    flash(f'Статус внесків для {user.username} оновлено.', 'success')
     
     return redirect(url_for('manage_fees'))
 
-# --- Маршруты для управления командами (без изменений) ---
+# --- Маршруты для управления командами ---
 
 @app.route('/manage_teams/<int:event_id>')
 @login_required
@@ -376,16 +390,11 @@ def manage_teams(event_id):
         flash('У вас немає дозволу на керування командами.', 'error')
         return redirect(url_for('index'))
 
-    events = load_events()
-    event = next((e for e in events if e['id'] == event_id), None)
-
-    if not event:
-        flash('Подія не знайдена.', 'error')
-        return redirect(url_for('index'))
+    event = Event.query.get_or_404(event_id)
     
-    all_participants = event.get('participants', [])
+    all_participants = event.participants
     assigned_participants = set()
-    for team_name, members in event.get('teams', {}).items():
+    for team_name, members in event.teams.items():
         assigned_participants.update(members)
     
     unassigned_participants = [p for p in all_participants if p not in assigned_participants]
@@ -402,31 +411,29 @@ def save_teams(event_id):
         flash('У вас немає дозволу на керування командами.', 'error')
         return redirect(url_for('index'))
 
-    events = load_events()
-    found_event = False
-    for event in events:
-        if event['id'] == event_id:
-            found_event = True
-            new_teams = {}
-            for key, value in request.form.items():
-                if key.startswith('team_name_'):
-                    team_index = key.replace('team_name_', '')
-                    team_name = value.strip()
-                    members_str = request.form.get(f'team_members_{team_index}', '').strip()
-                    if team_name:
-                        members = [m.strip() for m in members_str.split(',') if m.strip()]
-                        new_teams[team_name] = members
-            
-            event['teams'] = new_teams
-            save_events(events)
-            flash('Команди успішно збережено!', 'success')
-            break
+    event = Event.query.get_or_404(event_id)
     
-    if not found_event:
-        flash('Подія не знайдена.', 'error')
+    new_teams = {}
+    for key, value in request.form.items():
+        if key.startswith('team_name_'):
+            team_index = key.replace('team_name_', '')
+            team_name = value.strip()
+            members_str = request.form.get(f'team_members_{team_index}', '').strip()
+            if team_name:
+                members = [m.strip() for m in members_str.split(',') if m.strip()]
+                new_teams[team_name] = members
+    
+    event.teams = new_teams # Обновляем JSON-строку
+    db.session.commit() # Сохраняем изменения в БД
+    
+    flash('Команди успішно збережено!', 'success')
     
     return redirect(url_for('manage_teams', event_id=event_id))
 
 
 if __name__ == '__main__':
+    # При первом запуске или для создания таблиц
+    # В реальном приложении это делается с помощью Alembic или других инструментов миграции
+    with app.app_context():
+        db.create_all() # Создаст таблицы в БД, если их еще нет
     app.run(debug=True)
