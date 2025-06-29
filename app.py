@@ -7,26 +7,20 @@ from datetime import datetime, timedelta
 import json 
 
 app = Flask(__name__)
-# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
-# Берем URL базы данных из переменной окружения DATABASE_URL
-# Это стандартная практика для хостингов типа Render
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///site.db') 
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Отключаем отслеживание изменений, чтобы избежать предупреждений
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app) # Инициализируем SQLAlchemy
+db = SQLAlchemy(app) 
 
-# === ВИДАЛІТЬ ЦЕЙ БЛОК ===
-# with app.app_context():
-#     db.create_all() 
-# ========================
+with app.app_context():
+    db.create_all() 
 
 @app.context_processor
 def utility_processor():
     return dict(enumerate=enumerate)
-
 
 # --- Настройка Flask-Login ---
 login_manager = LoginManager()
@@ -37,8 +31,8 @@ login_manager.login_view = 'login'
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False) # Увеличено до 256
-    role = db.Column(db.String(20), default='user') # 'user' или 'admin'
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(20), default='user')
     has_paid_fees = db.Column(db.Boolean, default=False)
 
     def is_admin(self):
@@ -53,16 +47,15 @@ class User(db.Model, UserMixin):
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    date = db.Column(db.String(10), nullable=False) # Дата в формате YYYY-MM-DD
-    # participants теперь будет хранить список словарей
-    # [{"username": "Іван", "timestamp": "YYYY-MM-DD HH:MM:SS", "status": "active"}]
+    # ЗМІНА ТУТ: date тепер зберігає дату та час
+    date = db.Column(db.String(20), nullable=False) # Формат YYYY-MM-DD HH:MM:SS
+    # НОВЕ ПОЛЕ: image_url
+    image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
 
-    # Геттеры и сеттеры для работы с JSON-полями
     @property
     def participants(self):
-        # ИСПРАВЛЕНИЕ: Убедитесь, что json.loads() всегда имеет полностью закрытую скобку
         return json.loads(self.participants_json)
 
     @participants.setter
@@ -71,7 +64,6 @@ class Event(db.Model):
 
     @property
     def teams(self):
-        # ИСПРАВЛЕНИЕ: Убедитесь, что json.loads() всегда имеет полностью закрытую скобку
         return json.loads(self.teams_json)
 
     @teams.setter
@@ -85,8 +77,8 @@ class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(150), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    date = db.Column(db.String(20), nullable=False) # Дата и время
-    author = db.Column(db.String(80), nullable=False) # Имя автора
+    date = db.Column(db.String(20), nullable=False)
+    author = db.Column(db.String(80), nullable=False)
 
     def __repr__(self):
         return f"Announcement('{self.title}', '{self.date}')"
@@ -94,14 +86,13 @@ class Announcement(db.Model):
 class Poll(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     question = db.Column(db.String(255), nullable=False)
-    options_json = db.Column(db.Text, nullable=False) # Храним список словарей опций как JSON
-    voted_users_json = db.Column(db.Text, default='[]') # Храним список проголосовавших пользователей как JSON
+    options_json = db.Column(db.Text, nullable=False)
+    voted_users_json = db.Column(db.Text, default='[]')
     date = db.Column(db.String(20), nullable=False)
     author = db.Column(db.String(80), nullable=False)
 
     @property
     def options(self):
-        # ИСПРАВЛЕНИЕ: Убедитесь, что json.loads() всегда имеет полностью закрытую скобку
         return json.loads(self.options_json)
 
     @options.setter
@@ -110,7 +101,6 @@ class Poll(db.Model):
 
     @property
     def voted_users(self):
-        # ИСПРАВЛЕНИЕ: Убедитесь, что json.loads() всегда имеет полностью закрытую скобку
         return json.loads(self.voted_users_json)
 
     @voted_users.setter
@@ -189,6 +179,7 @@ def logout():
 
 @app.route('/')
 def index():
+    # ЗМІНА ТУТ: Сортуємо події також за часом
     events = Event.query.order_by(Event.date).all()
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
@@ -202,9 +193,24 @@ def add_event():
         return redirect(url_for('index'))
 
     event_name = request.form['event_name']
-    event_date = request.form['event_date']
-    if event_name and event_date:
-        new_event = Event(name=event_name, date=event_date, participants_json='[]', teams_json='{}')
+    # ЗМІНА ТУТ: Отримуємо дату і час
+    event_datetime_str = request.form['event_datetime'] 
+    image_url = request.form.get('image_url') # НОВЕ: отримуємо image_url
+
+    if event_name and event_datetime_str:
+        # Перетворюємо рядок дати/часу в потрібний формат для зберігання
+        try:
+            # Перевіряємо, чи можна розпарсити дату/час.
+            # Якщо користувач ввів неповну дату або неправильний формат, може виникнути помилка.
+            # Якщо HTML5 input type="datetime-local" використовується, формат буде 'YYYY-MM-DDTHH:MM'
+            # Треба перетворити його на 'YYYY-MM-DD HH:MM:SS' для зберігання
+            dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
+            formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            flash('Неправильний формат дати або часу. Використовуйте YYYY-MM-DD HH:MM.', 'error')
+            return redirect(url_for('index'))
+
+        new_event = Event(name=event_name, date=formatted_datetime, participants_json='[]', teams_json='{}', image_url=image_url if image_url else None) # НОВЕ: зберігаємо image_url
         db.session.add(new_event)
         db.session.commit()
         flash('Подію успішно додано!', 'success')
@@ -438,7 +444,7 @@ def save_teams(event_id):
 
 if __name__ == '__main__':
     # Цей блок запускається тільки при локальному запуску 'python app.py'
-    # На Render, db.create_all() тепер буде викликатися через Build Command.
+    # На Render, db.create_all() викликається через init_db.py в Build Command
     with app.app_context(): 
-        db.create_all() # Цей рядок ПОВИНЕН ЗАЛИШИТИСЯ ТУТ ДЛЯ ЛОКАЛЬНОГО ЗАПУСКУ
+        db.create_all() 
     app.run(debug=True)

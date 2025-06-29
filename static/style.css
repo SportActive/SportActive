@@ -605,3 +605,18 @@ textarea.drag-over {
 .info-message-box a:hover {
     text-decoration: underline;
 }
+/* Стиль для зображень подій */
+.event-image {
+    max-width: 100px; /* Максимальна ширина зображення */
+    max-height: 100px; /* Максимальна висота зображення */
+    float: right; /* Обтікання текстом справа */
+    margin-left: 15px; /* Відступ від тексту */
+    margin-bottom: 10px; /* Відступ знизу */
+    border-radius: 8px; /* Заокруглені кути */
+    object-fit: cover; /* Зберігаємо пропорції та обрізаємо, якщо потрібно */
+}
+
+/* Якщо зображення зліва */
+.event-card h3 {
+    overflow: hidden; /* Щоб текст не вилазив за зображення */
+}

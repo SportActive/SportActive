@@ -40,23 +40,24 @@
           {% endif %}
         {% endwith %}
 
-        {# ЗМІНА ТУТ: Поле "Додати нову подію" тепер відображається тільки для адміністраторів #}
+        {# Поле "Додати нову подію" тепер відображається тільки для адміністраторів #}
         {% if current_user.is_authenticated and current_user.is_admin() %}
             <div class="add-event-section">
                 <h2>Додати нову подію</h2>
                 <form action="{{ url_for('add_event') }}" method="POST">
                     <input type="text" name="event_name" placeholder="Назва події (напр. Бадмінтон)" required>
-                    <input type="date" name="event_date" required>
+                    {# Використовуємо datetime-local для дати і часу #}
+                    <input type="datetime-local" name="event_datetime" required>
+                    {# НОВЕ ПОЛЕ: для URL зображення #}
+                    <input type="url" name="image_url" placeholder="URL зображення (напр. https://example.com/ball.png)">
                     <button type="submit">Додати подію</button>
                 </form>
             </div>
         {% elif current_user.is_authenticated %}
-            {# Цей блок відображається, якщо користувач авторизований, але не є адміном #}
             <div class="add-event-section info-message-box">
                 <p>Лише адміністратори можуть додавати події.</p>
             </div>
         {% else %}
-            {# Цей блок відображається, якщо користувач не авторизований #}
             <div class="add-event-section info-message-box">
                 <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб додавати події.</p>
             </div>
@@ -68,6 +69,10 @@
             {% if events %}
                 {% for event in events %}
                     <div class="event-card">
+                        {# НОВЕ: Відображення зображення #}
+                        {% if event.image_url %}
+                            <img src="{{ event.image_url }}" alt="{{ event.name }}" class="event-image">
+                        {% endif %}
                         <h3>{{ event.name }} - {{ event.date }}</h3>
                         {# Підраховуємо лише активних учасників #}
                         {% set active_participants_count = 0 %}
