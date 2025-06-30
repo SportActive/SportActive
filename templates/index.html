@@ -104,17 +104,13 @@
                                     {% endif %}
                                     
                                     {# ЗМІНА ТУТ: Додаємо назву команди, якщо учасник є в ній #}
-                                    {% set team_name_for_participant = '' %}
+                                    {# Цей блок тепер коректно виводить назву команди #}
                                     {% for team_name, members in event.teams.items() %}
                                         {% if p_entry.username in members %}
-                                            {% set team_name_for_participant = team_name %}
-                                            {% break %} {# Можна використовувати break тут, бо це всередині for #}
+                                            <span class="team-name-badge">{{ team_name }}</span>
+                                            {% break %} {# 'break' тут коректний, бо він у циклі for #}
                                         {% endif %}
                                     {% endfor %}
-
-                                    {% if team_name_for_participant %}
-                                        <span class="team-name-badge">{{ team_name_for_participant }}</span>
-                                    {% endif %}
 
                                     <span class="participation-info">
                                         (Запис: {{ p_entry.timestamp | default('Н/Д') }}
