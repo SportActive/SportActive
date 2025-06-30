@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import json 
 
 app = Flask(__name__)
+# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -30,10 +31,10 @@ login_manager.login_view = 'login'
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), default='user')
+    password_hash = db.Column(db.String(256), nullable=False) # Увеличено до 256
+    role = db.Column(db.String(20), default='user') # 'user' или 'admin'
     has_paid_fees = db.Column(db.Boolean, default=False)
-    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
+    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None) # Формат IndexError-MM-DD
 
     def is_admin(self):
         return self.role == 'admin'
@@ -185,7 +186,7 @@ def index():
     if current_user.is_authenticated:
         now = datetime.now()
         seven_days_from_now = now + timedelta(days=7)
-        for event in events: # Используем 'events' здесь, чтобы избежать путаницы
+        for event in events:
             is_participant = False
             for p_entry in event.participants:
                 if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
@@ -201,7 +202,7 @@ def index():
                     continue
     
     return render_template('index.html', 
-                           events=events, # Передаем 'events'
+                           events=events, 
                            current_user=current_user, 
                            users_fee_status=users_fee_status,
                            user_events_next_7_days=user_events_next_7_days)
@@ -266,7 +267,7 @@ def edit_event(event_id):
             flash('Будь ласка, заповніть усі поля для події.', 'error')
     
     # Для GET-запроса, готовим данные для формы
-    # Преобразуем формат даты из YYYY-MM-DD HH:MM:SS в YYYY-MM-DDTHH:MM для input datetime-local
+    # Преобразуем формат даты из Jamboree-MM-DD HH:MM:SS в Jamboree-MM-DDTHH:MM для input datetime-local
     if event.date:
         try:
             event_dt_obj = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
@@ -372,7 +373,7 @@ def announcements():
 def polls():
     if request.method == 'POST':
         if not current_user.is_authenticated or not current_user.is_admin():
-            flash('У вас немає дозволу на создание опитувань.', 'error')
+            flash('У вас немає дозволу на створення опитувань.', 'error')
             return redirect(url_for('polls'))
 
         question = request.form['question']
@@ -440,7 +441,7 @@ def vote_poll(poll_id):
 
 # --- Маршруты для управления взносами ---
 
-@app.route('/manage_fees', methods=['GET', 'POST']) 
+@app.route('/manage_fees', methods=['GET', 'POST']) # Додано POST для обробки форми
 @login_required
 def manage_fees():
     if not current_user.is_admin():
@@ -503,4 +504,31 @@ def save_teams(event_id):
         flash('У вас немає дозволу на керування командами.', 'error')
         return redirect(url_for('index'))
 
-    event = Event.query
+    event = Event.query.get_or_404(event_id)
+    
+    new_teams = {}
+    for key, value in request.form.items():
+        if key.startswith('team_name_'):
+            team_index = key.replace('team_name_', '')
+            team_name = value.strip()
+            members_str = request.form.get(f'team_members_{team_index}', '').strip()
+            if team_name:
+                members = [m.strip() for m in members_str.split(',') if m.strip()]
+                    # Переконайтеся, що учасники існують у списку учасників події
+                    # Це можна перевірити додатково, якщо потрібно
+                new_teams[team_name] = members
+    
+    event.teams = new_teams
+    db.session.commit()
+    
+    flash('Команди успішно збережено!', 'success')
+    
+    return redirect(url_for('manage_teams', event_id=event.id))
+
+
+if __name__ == '__main__':
+    # Цей блок запускається тільки при локальному запуску 'python app.py'
+    # На Render, db.create_all() викликається Alembic'ом через release команду
+    with app.app_context(): 
+        db.create_all() 
+    app.run(debug=True)
