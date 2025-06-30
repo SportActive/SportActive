@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import json 
 
 app = Flask(__name__)
+# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -15,10 +16,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app) 
 
-# === ЦЬОГО БЛОКУ ТУТ БУТИ НЕ ПОВИННО (ВИДАЛИТИ) ===
-# with app.app_context():
-#     db.create_all() 
-# ==================================================
+# db.create_all() (удален из верхнего уровня, теперь только Alembic или в if __name__)
 
 @app.context_processor
 def utility_processor():
@@ -33,11 +31,10 @@ login_manager.login_view = 'login'
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False) # Увеличено до 256
-    role = db.Column(db.String(20), default='user') # 'user' или 'admin'
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(20), default='user')
     has_paid_fees = db.Column(db.Boolean, default=False)
-    # НОВЕ ПОЛЕ: Дата останньої сплати внесків
-    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None) # Формат IndexError-MM-DD
+    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
 
     def is_admin(self):
         return self.role == 'admin'
@@ -181,7 +178,8 @@ def logout():
 
 @app.route('/')
 def index():
-    events = Event.query.order_by(Event.date).all()
+    # ЗМІНА ТУТ: ВИЗНАЧЕННЯ all_events
+    all_events = Event.query.order_by(Event.date).all()
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
 
