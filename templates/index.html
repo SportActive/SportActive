@@ -102,6 +102,7 @@
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
                                     
+                                    {# ЗМІНА ТУТ: Додаємо назву команди, якщо учасник є в ній #}
                                     {% set team_name_for_participant = '' %}
                                     {% for team_name, members in event.teams.items() %}
                                         {% if p_entry.username in members %}
@@ -125,6 +126,7 @@
                             {% endfor %}
                         </ul>
 
+                        {# Блок "Розподіл по командам" залишаємо, але його можна приховати/показати за бажанням #}
                         {% if event.teams %}
                             <div class="teams-display">
                                 <h4>Розподіл по командам:</h4>
