@@ -15,46 +15,71 @@ body {
     background-color: #ffffff;
     padding: 40px;
     border-radius: 12px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-    max-width: 900px; /* Увеличим максимальную ширину */
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1); /* Более выраженная тень для основного контейнера */
+    max-width: 900px;
     width: 100%;
     margin-top: 20px;
     margin-bottom: 20px;
 }
 
-h1, h2, h3 {
-    color: #2c3e50; /* Темный заголовок */
+h1, h2, h3, h4 { /* Общий стиль для заголовков */
+    color: #2c3e50;
     text-align: center;
     margin-bottom: 25px;
+    font-weight: 600;
 }
 
 h1 {
-    font-size: 2.5em;
+    font-size: 2.8em; /* Немного увеличен */
     font-weight: 700;
+    color: #0056b3; /* Цвет для главного заголовка */
 }
 
 h2 {
-    font-size: 1.8em;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 10px;
-    margin-top: 30px;
-    margin-bottom: 20px;
+    font-size: 2.0em; /* Немного увеличен */
+    border-bottom: 1px solid #e0e9f0; /* Более мягкая черта */
+    padding-bottom: 12px;
+    margin-top: 40px; /* Отступ сверху */
+    margin-bottom: 25px;
 }
 
-/* Секции */
-.add-event-section, .events-list {
-    margin-bottom: 40px;
-    padding-top: 20px;
+h3 {
+    font-size: 1.6em;
+    margin-top: 0;
+    margin-bottom: 15px;
+    text-align: left; /* Заголовки карточек по левому краю */
+}
+
+h4 {
+    font-size: 1.3em;
+    text-align: left;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: #4a698a;
+}
+
+
+/* Секции (общие стили для блоков) */
+.add-event-section, 
+.events-list, 
+.announcements-list, 
+.polls-list,
+.user-fees-list,
+.team-management-section,
+.personal-calendar-section,
+.form-section {
+    margin-bottom: 40px; /* Единый отступ между основными блоками */
+    padding-top: 20px; /* Отступ сверху внутри секции */
 }
 
 /* Формы */
 form {
     display: flex;
     flex-wrap: wrap;
-    gap: 15px; /* Увеличим отступы между элементами */
+    gap: 15px;
     margin-top: 20px;
     justify-content: center;
-    align-items: center; /* Выравнивание элементов по центру вертикали */
+    align-items: center;
 }
 
 form input[type="text"],
@@ -63,13 +88,14 @@ form input[type="password"],
 form input[type="url"],
 form input[type="datetime-local"],
 form textarea {
-    padding: 12px 15px; /* Увеличим padding */
-    border: 1px solid #c0d3eb; /* Более мягкий цвет рамки */
-    border-radius: 8px; /* Скруглим углы */
+    padding: 12px 15px;
+    border: 1px solid #c0d3eb;
+    border-radius: 8px;
     flex-grow: 1;
     min-width: 200px;
     font-size: 1em;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    box-sizing: border-box; /* Важно для calc() и padding */
 }
 
 form input[type="text"]:focus,
@@ -79,19 +105,19 @@ form input[type="url"]:focus,
 form input[type="datetime-local"]:focus,
 form textarea:focus {
     border-color: #007bff;
-    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Эффект свечения при фокусе */
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
     outline: none;
 }
 
 /* Общий стиль для кнопок (для единообразия) */
-form button, .small-button { /* Добавлен .small-button сюда */
+form button, .small-button {
     background-color: #007bff; /* Основной синий */
     color: white;
-    padding: 10px 20px; /* Немного уменьшен padding для более компактного вида */
+    padding: 10px 20px;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 1.0em; /* Немного уменьшен размер шрифта */
+    font-size: 1.0em;
     font-weight: 600;
     transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
     flex-shrink: 0;
@@ -99,30 +125,424 @@ form button, .small-button { /* Добавлен .small-button сюда */
     display: inline-flex; /* Для центрирования текста в кнопках-ссылках */
     align-items: center;
     justify-content: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Тень для всех кнопок */
 }
 
 form button:hover, .small-button:hover {
     background-color: #0056b3;
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); /* Большая тень при наведении */
 }
 
 form button:active, .small-button:active {
     transform: translateY(0);
-    box-shadow: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Меньшая тень при нажатии */
 }
 
 
-/* Карточки событий */
-.event-card {
-    background-color: #f8fbfd; /* Очень светлый фон для карточек */
+/* Карточки событий, объявлений, опросов (общий стиль для выделенных блоков) */
+.event-card, .announcement-card, .poll-card {
+    background-color: #f8fbfd;
     border: 1px solid #e0e9f0;
     border-radius: 10px;
     padding: 25px;
     margin-bottom: 20px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); /* Более выраженная тень */
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative; /* Для позиционирования изображений */
 }
 
-.event-card:hover {
-    transform: translateY(-
+.event-card:hover, .announcement-card:hover, .poll-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Стиль для изображений событий */
+.event-image {
+    max-width: 100px;
+    max-height: 100px;
+    float: right;
+    margin-left: 15px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    object-fit: cover;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.event-card h3 {
+    overflow: hidden;
+}
+
+.event-card p {
+    margin-bottom: 10px;
+    color: #555;
+}
+
+.event-card ul {
+    list-style: none;
+    padding: 0;
+    margin-top: 15px;
+}
+
+.event-card ul li {
+    background-color: #eef2f5;
+    border-left: 4px solid #007bff;
+    padding: 10px 15px;
+    margin-bottom: 8px;
+    border-radius: 5px;
+    font-weight: 500;
+    color: #333;
+    display: flex; /* Для выравнивания элементов внутри li */
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.event-card ul li:last-child {
+    margin-bottom: 0;
+}
+
+
+/* Сообщения flash */
+.flashes {
+    list-style: none;
+    padding: 0;
+    margin: 25px 0;
+    text-align: center;
+}
+
+.flashes li {
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1.05em;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.flashes .success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.flashes .error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.flashes .info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+/* Стили для аутентификации и администратора */
+.auth-links {
+    text-align: right;
+    margin-bottom: 25px;
+    font-size: 1.1em;
+}
+
+.auth-links a {
+    margin-left: 15px;
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.auth-links a:hover {
+    color: #0056b3;
+    text-decoration: underline;
+}
+
+.auth-links p {
+    display: inline-block;
+    margin: 0;
+    margin-right: 10px;
+    font-weight: bold;
+    color: #444;
+}
+
+.admin-label {
+    font-size: 0.8em;
+    color: #28a745;
+    background-color: #e6ffed;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+    font-weight: 600;
+    border: 1px solid #c3e6cb;
+}
+
+/* Стилі для повідомлень про доступ до форм (як на сторінках оголошень/опитувань) */
+.info-message-box {
+    text-align: center;
+    padding: 20px;
+    background-color: #e6f7ff;
+    border: 1px solid #91d5ff;
+    color: #084c7c;
+    border-radius: 8px;
+    margin: 30px auto;
+    max-width: 600px;
+    font-size: 1.1em;
+}
+
+.info-message-box p {
+    margin: 0;
+}
+
+.info-message-box a {
+    color: #0056b3;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.info-message-box a:hover {
+    text-decoration: underline;
+}
+
+/* --- Нові стилі для навігації --- */
+.main-nav {
+    text-align: center;
+    margin: 20px 0 30px 0;
+    border-bottom: 1px solid #e0e9f0;
+    padding-bottom: 15px;
+}
+
+.main-nav a {
+    display: inline-block;
+    margin: 0 15px;
+    padding: 8px 15px;
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.1em;
+    border-radius: 6px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.main-nav a:hover {
+    background-color: #e0f2ff;
+    color: #0056b3;
+}
+
+.main-nav a.admin-action {
+    background-color: #28a745;
+    color: white;
+    margin-left: 25px;
+}
+
+.main-nav a.admin-action:hover {
+    background-color: #218838;
+}
+
+/* --- Стилі для Оголошень --- */
+.announcements-list {
+    margin-top: 30px;
+}
+
+/* Стиль для форм добавления/создания (узкие формы) */
+.form-narrow {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f8fbfd;
+    border: 1px solid #e0e9f0;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.form-narrow textarea {
+    width: calc(100% - 30px);
+    padding: 12px 15px;
+    border: 1px solid #c0d3eb;
+    border-radius: 8px;
+    font-size: 1em;
+    resize: vertical;
+    min-height: 100px;
+    margin-bottom: 15px;
+    box-sizing: border-box;
+}
+
+/* --- Стилі для Опитувань --- */
+.polls-list {
+    margin-top: 30px;
+}
+
+.poll-card .poll-option-label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+    color: #444;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 5px;
+    transition: background-color 0.2s ease;
+}
+
+.poll-card .poll-option-label:hover {
+    background-color: #eef2f5;
+}
+
+.poll-card input[type="radio"] {
+    margin-right: 10px;
+    transform: scale(1.2);
+}
+
+.poll-card button {
+    margin-top: 15px;
+    width: auto;
+}
+
+.poll-results {
+    background-color: #eef2f5;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.poll-results p {
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333;
+    text-align: left;
+}
+
+.poll-results ul {
+    list-style: none;
+    padding: 0;
+}
+
+.poll-results ul li {
+    background-color: #fff;
+    border-left: 4px solid #007bff;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1em;
+    color: #333;
+}
+
+.poll-results ul li:last-child {
+    margin-bottom: 0;
+}
+
+.poll-results .voted-message {
+    text-align: center;
+    color: #0c5460;
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: normal;
+    margin-top: 15px;
+}
+
+/* --- Стилі для badges та списку користувачів --- */
+.fee-paid-badge {
+    color: #28a745;
+    font-weight: bold;
+    margin-left: 5px;
+    font-size: 0.9em;
+}
+
+/* Стилі для таблиці управління внесками */
+.user-fees-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05); /* Добавлены тени для таблицы */
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.user-fees-list th,
+.user-fees-list td {
+    padding: 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.user-fees-list th {
+    background-color: #f0f4f7;
+    color: #4a698a;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9em;
+}
+
+.user-fees-list tr:last-child td {
+    border-bottom: none;
+}
+
+.user-fees-list tr:hover {
+    background-color: #f6f9fc;
+}
+
+.fee-paid-status {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.fee-unpaid-status {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Стилі для інлайн-форми в таблиці керування внесками */
+.inline-form {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 0;
+    justify-content: flex-start;
+}
+
+.inline-form input[type="date"] {
+    max-width: 130px;
+    padding: 6px 8px;
+    font-size: 0.9em;
+    border-radius: 4px;
+}
+
+/* --- Стилі для розподілу по командам --- */
+.teams-display {
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px dashed #e0e9f0; /* Более мягкая черта */
+}
+
+/* Стилі для сторінки керування командами */
+.team-management-section {
+    display: flex;
+    gap: 30px;
+    margin-top: 30px;
+    flex-wrap: wrap;
+    background-color: #f8fbfd; /* Фон для всей секции */
+    border: 1px solid #e0e9f0;
+    border-radius: 10px;
+    padding: 25px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.unassigned-participants {
+    flex: 1;
+    min-width: 250px;
+    background-color: #eef2f5; /* Светлее фон для списка */
+    border: 1px solid #d0dbe2; /* Мягкая рамка */
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05); /* Внутренняя тень */
+}
+
+.unassigned-participants h3 {
+    text-align: left;
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #2c3e50;
