@@ -865,3 +865,37 @@ h4 {
     margin-left: 8px;
     display: inline-block; /* Щоб був на одному рядку з іменем */
 }
+
+/* Стилі для кнопок адміністрування подій */
+.admin-event-actions {
+    margin-top: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px; /* Отступы между кнопками */
+    justify-content: flex-end; /* Выравнивание по правому краю */
+}
+
+.admin-event-actions .small-button {
+    margin: 0; /* Переопределяем margin от .small-button */
+}
+
+.admin-edit-event-link {
+    background-color: #ffc107; /* Желтый цвет для редактирования */
+    color: #343a40;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.admin-edit-event-link:hover {
+    background-color: #e0a800;
+}
+
+.admin-delete-event-btn {
+    background-color: #dc3545; /* Красный цвет для удаления */
+    color: white;
+    font-weight: 600;
+}
+
+.admin-delete-event-btn:hover {
+    background-color: #c82333;
+}

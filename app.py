@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 import json 
 
 app = Flask(__name__)
-# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -178,8 +177,7 @@ def logout():
 
 @app.route('/')
 def index():
-    # ЗМІНА ТУТ: ВИЗНАЧЕННЯ all_events
-    all_events = Event.query.order_by(Event.date).all()
+    events = Event.query.order_by(Event.date).all()
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
 
@@ -187,7 +185,7 @@ def index():
     if current_user.is_authenticated:
         now = datetime.now()
         seven_days_from_now = now + timedelta(days=7)
-        for event in all_events:
+        for event in events: # Используем 'events' здесь, чтобы избежать путаницы
             is_participant = False
             for p_entry in event.participants:
                 if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
@@ -203,7 +201,7 @@ def index():
                     continue
     
     return render_template('index.html', 
-                           events=all_events, 
+                           events=events, # Передаем 'events'
                            current_user=current_user, 
                            users_fee_status=users_fee_status,
                            user_events_next_7_days=user_events_next_7_days)
@@ -234,6 +232,66 @@ def add_event():
     else:
         flash('Будь ласка, заповніть усі поля для події.', 'error')
     return redirect(url_for('index'))
+
+# --- НОВЫЙ МАРШРУТ ДЛЯ РЕДАКТИРОВАНИЯ СОБЫТИЯ ---
+@app.route('/edit_event/<int:event_id>', methods=['GET', 'POST'])
+@login_required
+def edit_event(event_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на редагування подій.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+
+    if request.method == 'POST':
+        event_name = request.form['event_name']
+        event_datetime_str = request.form['event_datetime']
+        image_url = request.form.get('image_url')
+
+        if event_name and event_datetime_str:
+            try:
+                dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
+                formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                flash('Неправильний формат дати або часу. Використовуйте РРРР-ММ-ДД HH:MM.', 'error')
+                return render_template('edit_event.html', event=event, current_user=current_user)
+
+            event.name = event_name
+            event.date = formatted_datetime
+            event.image_url = image_url if image_url else None
+            db.session.commit()
+            flash('Подію успішно оновлено!', 'success')
+            return redirect(url_for('index'))
+        else:
+            flash('Будь ласка, заповніть усі поля для події.', 'error')
+    
+    # Для GET-запроса, готовим данные для формы
+    # Преобразуем формат даты из YYYY-MM-DD HH:MM:SS в YYYY-MM-DDTHH:MM для input datetime-local
+    if event.date:
+        try:
+            event_dt_obj = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+            event.formatted_datetime_local = event_dt_obj.strftime('%Y-%m-%dT%H:%M')
+        except ValueError:
+            event.formatted_datetime_local = '' # Если формат даты в БД не соответствует, сбросим
+    else:
+        event.formatted_datetime_local = ''
+
+    return render_template('edit_event.html', event=event, current_user=current_user)
+
+# --- НОВЫЙ МАРШРУТ ДЛЯ УДАЛЕНИЯ СОБЫТИЯ ---
+@app.route('/delete_event/<int:event_id>', methods=['POST'])
+@login_required
+def delete_event(event_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на видалення подій.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+    db.session.delete(event)
+    db.session.commit()
+    flash('Подію успішно видалено!', 'success')
+    return redirect(url_for('index'))
+
 
 @app.route('/toggle_participation/<int:event_id>', methods=['POST'])
 @login_required
@@ -314,7 +372,7 @@ def announcements():
 def polls():
     if request.method == 'POST':
         if not current_user.is_authenticated or not current_user.is_admin():
-            flash('У вас немає дозволу на створення опитувань.', 'error')
+            flash('У вас немає дозволу на создание опитувань.', 'error')
             return redirect(url_for('polls'))
 
         question = request.form['question']
@@ -382,7 +440,7 @@ def vote_poll(poll_id):
 
 # --- Маршруты для управления взносами ---
 
-@app.route('/manage_fees', methods=['GET', 'POST']) # Додано POST для обробки форми
+@app.route('/manage_fees', methods=['GET', 'POST']) 
 @login_required
 def manage_fees():
     if not current_user.is_admin():
@@ -406,9 +464,7 @@ def manage_fees():
                     flash('Недійсний формат дати. Використовуйте РРРР-ММ-ДД.', 'error')
             else:
                 flash('Будь ласка, оберіть користувача та введіть дату.', 'error')
-        else: # Якщо форма відправлена без user_id або fee_date (наприклад, кнопка toggle)
-             # Це потрібно, якщо ви повернули попередню логіку "toggle_fee_status"
-             # Для поточної інтегрованої форми це не потрібно, але краще обробити
+        else:
             pass 
         return redirect(url_for('manage_fees'))
 
@@ -447,31 +503,4 @@ def save_teams(event_id):
         flash('У вас немає дозволу на керування командами.', 'error')
         return redirect(url_for('index'))
 
-    event = Event.query.get_or_404(event_id)
-    
-    new_teams = {}
-    for key, value in request.form.items():
-        if key.startswith('team_name_'):
-            team_index = key.replace('team_name_', '')
-            team_name = value.strip()
-            members_str = request.form.get(f'team_members_{team_index}', '').strip()
-            if team_name:
-                members = [m.strip() for m in members_str.split(',') if m.strip()]
-                    # Переконайтеся, що учасники існують у списку учасників події
-                    # Це можна перевірити додатково, якщо потрібно
-                new_teams[team_name] = members
-    
-    event.teams = new_teams
-    db.session.commit()
-    
-    flash('Команди успішно збережено!', 'success')
-    
-    return redirect(url_for('manage_teams', event_id=event_id))
-
-
-if __name__ == '__main__':
-    # Цей блок запускається тільки при локальному запуску 'python app.py'
-    # На Render, db.create_all() викликається Alembic'ом через release команду
-    with app.app_context(): 
-        db.create_all() 
-    app.run(debug=True)
+    event = Event.query

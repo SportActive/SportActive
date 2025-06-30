@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редагувати подію: {{ event.name }} - Клуб спортивних ігор</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Редагувати подію: "{{ event.name }}"</h1>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <a href="{{ url_for('logout') }}">Вийти</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Увійти</a> | 
+                <a href="{{ url_for('register') }}">Зареєструватися</a>
+            {% endif %}
+        </div>
+
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}">Події</a>
+            <a href="{{ url_for('announcements') }}">Оголошення</a>
+            <a href="{{ url_for('polls') }}">Опитування</a>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+            {% endif %}
+        </nav>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('edit_event', event_id=event.id) }}" method="POST" class="form-narrow">
+            <input type="text" name="event_name" placeholder="Назва події" value="{{ event.name }}" required>
+            {# event.formatted_datetime_local має бути встановлено в app.py #}
+            <input type="datetime-local" name="event_datetime" value="{{ event.formatted_datetime_local }}" required>
+            <input type="url" name="image_url" placeholder="URL зображення" value="{{ event.image_url if event.image_url else '' }}">
+            <button type="submit">Зберегти зміни</button>
+        </form>
+        <p><a href="{{ url_for('index') }}" class="back-link">← Повернутися до подій</a></p>
+    </div>
+</body>
+</html>
