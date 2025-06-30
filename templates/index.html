@@ -103,14 +103,18 @@
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
                                     
-                                    {# ЗМІНА ТУТ: Додаємо назву команди, якщо учасник є в ній #}
-                                    {# Цей блок тепер коректно виводить назву команди #}
+                                    {# ЗМІНА ТУТ: Використовуємо інший підхід для отримання назви команди #}
+                                    {% set team_name_for_participant = '' %}
                                     {% for team_name, members in event.teams.items() %}
                                         {% if p_entry.username in members %}
-                                            <span class="team-name-badge">{{ team_name }}</span>
+                                            {% set team_name_for_participant = team_name %}
                                             {% break %} {# 'break' тут коректний, бо він у циклі for #}
                                         {% endif %}
                                     {% endfor %}
+
+                                    {% if team_name_for_participant %}
+                                        <span class="team-name-badge">{{ team_name_for_participant }}</span>
+                                    {% endif %}
 
                                     <span class="participation-info">
                                         (Запис: {{ p_entry.timestamp | default('Н/Д') }}
