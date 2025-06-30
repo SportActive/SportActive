@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 import json 
 
 app = Flask(__name__)
-# ВАЖНО: Секретный ключ теперь может быть взят из переменной окручения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -16,10 +15,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app) 
 
-# === ЦЬОГО БЛОКУ ТУТ БУТИ НЕ ПОВИННО ===
+# === ЦЬОГО БЛОКУ ТУТ БУТИ НЕ ПОВИННО (ВИДАЛИТИ) ===
 # with app.app_context():
 #     db.create_all() 
-# ======================================
+# ==================================================
 
 @app.context_processor
 def utility_processor():
@@ -34,9 +33,11 @@ login_manager.login_view = 'login'
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), default='user')
+    password_hash = db.Column(db.String(256), nullable=False) # Увеличено до 256
+    role = db.Column(db.String(20), default='user') # 'user' или 'admin'
     has_paid_fees = db.Column(db.Boolean, default=False)
+    # НОВЕ ПОЛЕ: Дата останньої сплати внесків
+    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None) # Формат IndexError-MM-DD
 
     def is_admin(self):
         return self.role == 'admin'
@@ -180,8 +181,7 @@ def logout():
 
 @app.route('/')
 def index():
-    # Зміна тут: Сортуємо події також за часом
-    all_events = Event.query.order_by(Event.date).all()
+    events = Event.query.order_by(Event.date).all()
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
 
@@ -190,30 +190,25 @@ def index():
         now = datetime.now()
         seven_days_from_now = now + timedelta(days=7)
         for event in all_events:
-            # Перевіряємо, чи користувач є активним учасником
             is_participant = False
             for p_entry in event.participants:
                 if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
                     is_participant = True
                     break
             
-            # Якщо користувач учасник, перевіряємо дату
             if is_participant:
                 try:
                     event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
-                    # Перевіряємо, чи подія в майбутньому (сьогодні або пізніше)
-                    # і чи вона відбудеться протягом наступних 7 днів
                     if event_dt >= now and event_dt <= seven_days_from_now:
                         user_events_next_7_days.append(event)
                 except ValueError:
-                    # Ігноруємо події з неправильним форматом дати
                     continue
     
     return render_template('index.html', 
                            events=all_events, 
                            current_user=current_user, 
                            users_fee_status=users_fee_status,
-                           user_events_next_7_days=user_events_next_7_days) # Передаємо новий список
+                           user_events_next_7_days=user_events_next_7_days)
 
 @app.route('/add_event', methods=['POST'])
 @login_required
@@ -389,31 +384,39 @@ def vote_poll(poll_id):
 
 # --- Маршруты для управления взносами ---
 
-@app.route('/manage_fees')
+@app.route('/manage_fees', methods=['GET', 'POST']) # Додано POST для обробки форми
 @login_required
 def manage_fees():
     if not current_user.is_admin():
         flash('У вас немає дозволу на керування внесками.', 'error')
         return redirect(url_for('index'))
     
+    if request.method == 'POST':
+        user_id = request.form.get('user_id')
+        fee_date_str = request.form.get('fee_date')
+
+        if user_id and fee_date_str:
+            user = User.query.get(int(user_id))
+            if user:
+                try:
+                    datetime.strptime(fee_date_str, '%Y-%m-%d')
+                    user.has_paid_fees = True
+                    user.last_fee_payment_date = fee_date_str
+                    db.session.commit()
+                    flash(f'Внески для {user.username} від {fee_date_str} успішно записано.', 'success')
+                except ValueError:
+                    flash('Недійсний формат дати. Використовуйте РРРР-ММ-ДД.', 'error')
+            else:
+                flash('Будь ласка, оберіть користувача та введіть дату.', 'error')
+        else: # Якщо форма відправлена без user_id або fee_date (наприклад, кнопка toggle)
+             # Це потрібно, якщо ви повернули попередню логіку "toggle_fee_status"
+             # Для поточної інтегрованої форми це не потрібно, але краще обробити
+            pass 
+        return redirect(url_for('manage_fees'))
+
     users = User.query.order_by(User.username).all()
     return render_template('manage_fees.html', users=users, current_user=current_user)
 
-@app.route('/toggle_fee_status/<int:user_id>', methods=['POST'])
-@login_required
-def toggle_fee_status(user_id):
-    if not current_user.is_admin():
-        flash('У вас немає дозволу на керування внесками.', 'error')
-        return redirect(url_for('index'))
-    
-    user = User.query.get_or_404(user_id)
-    
-    user.has_paid_fees = not user.has_paid_fees
-    db.session.commit()
-    
-    flash(f'Статус внесків для {user.username} оновлено.', 'success')
-    
-    return redirect(url_for('manage_fees'))
 
 # --- Маршруты для управления командами ---
 
@@ -456,6 +459,8 @@ def save_teams(event_id):
             members_str = request.form.get(f'team_members_{team_index}', '').strip()
             if team_name:
                 members = [m.strip() for m in members_str.split(',') if m.strip()]
+                    # Переконайтеся, що учасники існують у списку учасників події
+                    # Це можна перевірити додатково, якщо потрібно
                 new_teams[team_name] = members
     
     event.teams = new_teams
@@ -468,7 +473,7 @@ def save_teams(event_id):
 
 if __name__ == '__main__':
     # Цей блок запускається тільки при локальному запуску 'python app.py'
-    # На Render, db.create_all() викликається через init_db.py в Build Command
+    # На Render, db.create_all() викликається Alembic'ом через release команду
     with app.app_context(): 
         db.create_all() 
     app.run(debug=True)

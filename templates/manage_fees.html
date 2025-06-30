@@ -47,6 +47,7 @@
                         <tr>
                             <th>Ім'я користувача</th>
                             <th>Статус внесків</th>
+                            <th>Дата останньої сплати</th> {# НОВА КОЛОНКА #}
                             <th>Дія</th>
                         </tr>
                     </thead>
@@ -55,7 +56,6 @@
                             <tr>
                                 <td>{{ user.username }}</td>
                                 <td>
-                                    {# ЗМІНА ТУТ: Доступ до атрибута через крапку #}
                                     {% if user.has_paid_fees %}
                                         <span class="fee-paid-status">Сплачено &#10003;</span>
                                     {% else %}
@@ -63,15 +63,15 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <form action="{{ url_for('toggle_fee_status', user_id=user.id) }}" method="POST">
-                                        <button type="submit" class="small-button">
-                                            {# ЗМІНА ТУТ: Доступ до атрибута через крапку #}
-                                            {% if user.has_paid_fees %}
-                                                Відмітити як "Не сплачено"
-                                            {% else %}
-                                                Відмітити як "Сплачено"
-                                            {% endif %}
-                                        </button>
+                                    {# Відображаємо дату, якщо вона є #}
+                                    {{ user.last_fee_payment_date if user.last_fee_payment_date else 'Немає даних' }}
+                                </td>
+                                <td>
+                                    {# Форма для оновлення статусу та дати #}
+                                    <form action="{{ url_for('manage_fees') }}" method="POST" class="inline-form">
+                                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                                        <input type="date" name="fee_date" value="{{ user.last_fee_payment_date if user.last_fee_payment_date else '' }}">
+                                        <button type="submit" class="small-button">Оновити</button>
                                     </form>
                                 </td>
                             </tr>
