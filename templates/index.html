@@ -103,11 +103,12 @@
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
                                     
-                                    {# Додаємо назву команди, якщо учасник є в ній #}
+                                    {# ЗМІНА ТУТ: Додаємо назву команди, якщо учасник є в ній #}
                                     {% set team_name_for_participant = '' %}
                                     {% for team_name, members in event.teams.items() %}
                                         {% if p_entry.username in members %}
                                             {% set team_name_for_participant = team_name %}
+                                            {% break %} {# Можна використовувати break тут, бо це всередині for #}
                                         {% endif %}
                                     {% endfor %}
 
@@ -161,7 +162,7 @@
                                 </button>
                             </form>
                             {% if current_user.is_admin() %}
-                                <div class="admin-event-actions">
+                                <div class="admin-event-actions"> {# НОВИЙ БЛОК ДЛЯ КНОПОК АДМІНА #}
                                     <a href="{{ url_for('manage_teams', event_id=event.id) }}" class="admin-manage-teams-link small-button">Керувати командами</a>
                                     <a href="{{ url_for('edit_event', event_id=event.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
                                     <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;">
