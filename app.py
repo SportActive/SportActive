@@ -654,8 +654,6 @@ def save_teams(event_id):
             members_str = request.form.get(f'team_members_{team_index}', '').strip()
             if team_name:
                 members = [m.strip() for m in members_str.split(',') if m.strip()]
-                    # Переконайтеся, що учасники існують у списку учасників події
-                    # Це можна перевірити додатково, якщо потрібно
                 new_teams[team_name] = members
     
     event.teams = new_teams
