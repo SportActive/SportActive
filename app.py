@@ -20,7 +20,36 @@ db = SQLAlchemy(app)
 
 @app.context_processor
 def utility_processor():
-    return dict(enumerate=enumerate)
+    def format_datetime_for_display(dt_str):
+        if not dt_str:
+            return "Н/Д"
+        try:
+            # Сначала парсим из формата БД (YYYY-MM-DD HH:MM:SS)
+            dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+            # Затем форматируем в DD.MM.YYYY HH:MM
+            return dt_obj.strftime('%d.%m.%Y %H:%M')
+        except ValueError:
+            # Если формат не соответствует, пробуем только дату (для last_fee_payment_date)
+            try:
+                dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
+                return dt_obj.strftime('%d.%m.%Y')
+            except ValueError:
+                return dt_str # Возвращаем как есть, если не удалось распарсить
+    
+    def format_date_only_for_display(date_str):
+        if not date_str:
+            return "Н/Д"
+        try:
+            # Парсим из формата БД (YYYY-MM-DD)
+            dt_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            # Форматируем в DD.MM.YYYY
+            return dt_obj.strftime('%d.%m.%Y')
+        except ValueError:
+            return date_str # Возвращаем как есть
+            
+    return dict(enumerate=enumerate, 
+                format_datetime_for_display=format_datetime_for_display,
+                format_date_only_for_display=format_date_only_for_display)
 
 # --- Настройка Flask-Login ---
 login_manager = LoginManager()
@@ -48,7 +77,7 @@ class User(db.Model, UserMixin):
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    date = db.Column(db.String(20), nullable=False)
+    date = db.Column(db.String(20), nullable=False) # Хранится Jamboree-MM-DD HH:MM:SS
     image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
@@ -76,7 +105,7 @@ class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(150), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    date = db.Column(db.String(20), nullable=False)
+    date = db.Column(db.String(20), nullable=False) # Хранится Jamboree-MM-DD HH:MM:SS
     author = db.Column(db.String(80), nullable=False)
 
     def __repr__(self):
@@ -87,7 +116,7 @@ class Poll(db.Model):
     question = db.Column(db.String(255), nullable=False)
     options_json = db.Column(db.Text, nullable=False)
     voted_users_json = db.Column(db.Text, default='[]')
-    date = db.Column(db.String(20), nullable=False)
+    date = db.Column(db.String(20), nullable=False) # Хранится Jamboree-MM-DD HH:MM:SS
     author = db.Column(db.String(80), nullable=False)
 
     @property
@@ -141,7 +170,7 @@ def register():
         db.session.add(new_user)
         db.session.commit()
         
-        flash('Реєстрація успішна! Тепер ви можете увівійти.', 'success')
+        flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
         return redirect(url_for('login'))
     
     return render_template('register.html')
@@ -159,7 +188,14 @@ def login():
         
         if user_found and user_found.check_password(password):
             login_user(user_found)
-            flash('Вхід успішний!', 'success')
+            
+            # --- НОВЕ: Персоналізоване повідомлення про внески ---
+            if user_found.has_paid_fees:
+                flash('Вхід успішний! Ми дуже вдячні вам за ваш внесок на підтримку клубу.', 'success')
+            else:
+                flash('Вхід успішний! На жаль, ми ще не отримали від вас членський внесок. Нам буде важко без вашої допомоги організовувати діяльність клубу(', 'info') 
+            # --- Кінець НОВОГО блоку ---
+
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
         else:
