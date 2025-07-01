@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response # Додано make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy 
 import os
@@ -9,6 +9,7 @@ import csv
 from io import StringIO 
 
 app = Flask(__name__)
+# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -102,6 +103,7 @@ class Event(db.Model):
     def __repr__(self):
         return f"Event('{self.name}', '{self.date}')"
 
+# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА СОБЫТИЙ ---
 class GameLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event_name = db.Column(db.String(100), nullable=False)
@@ -138,17 +140,6 @@ class GameLog(db.Model):
 
     def __repr__(self):
         return f"GameLog('{self.event_name}', '{self.event_date}')"
-
-# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА ОПЛАТ ---
-class FeeLog(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), nullable=False)
-    payment_date = db.Column(db.String(10), nullable=False) # Дата оплаты, которую ввел админ (ДД-ММ-РРРР)
-    logged_by_admin = db.Column(db.String(80), nullable=False) # Кто из админов отметил оплату
-    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')) # Время, когда запись попала в лог
-
-    def __repr__(self):
-        return f"FeeLog('{self.username}', '{self.payment_date}', '{self.logged_by_admin}')"
 
 
 class Announcement(db.Model):
@@ -613,7 +604,7 @@ def manage_fees():
                 except ValueError:
                     flash('Недійсний формат дати. Використовуйте РРРР-ММ-ДД.', 'error')
             else:
-                flash('Користувача не знайдено.', 'error')
+                flash('Будь ласка, оберіть користувача та введіть дату.', 'error')
         else:
             pass 
         return redirect(url_for('manage_fees'))
@@ -706,9 +697,9 @@ def export_game_log():
             log.event_name,
             format_datetime_for_display(log.event_date), # Форматируем дату для CSV
             format_datetime_for_display(log.logged_at), # Форматируем дату лога для CSV
-            ", ".join(log.active_participants), 
-            ", ".join(log.cancelled_participants), 
-            json.dumps(log.teams, ensure_ascii=False), 
+            ", ".join(log.active_participants), # Список в строку
+            ", ".join(log.cancelled_participants), # Список в строку
+            json.dumps(log.teams, ensure_ascii=False), # Словарь команд в JSON-строку
             log.image_url if log.image_url else ""
         ]
         cw.writerow(row)
@@ -750,3 +741,22 @@ def export_fee_log():
     for log in fee_logs:
         row = [
             log.username,
+            format_date_only_for_display(log.payment_date), # Форматируем дату оплаты
+            log.logged_by_admin,
+            format_datetime_for_display(log.logged_at) # Форматируем время лога
+        ]
+        cw.writerow(row)
+    
+    output = si.getvalue()
+    response = make_response(output)
+    response.headers["Content-Disposition"] = "attachment; filename=fee_log.csv"
+    response.headers["Content-type"] = "text/csv"
+    return response
+
+
+if __name__ == '__main__':
+    # Цей блок запускається тільки при локальному запуску 'python app.py'
+    # На Render, db.create_all() викликається Alembic'ом через release команду
+    with app.app_context(): 
+        db.create_all() 
+    app.run(debug=True)
