@@ -18,39 +18,9 @@ db = SQLAlchemy(app)
 
 # db.create_all() (удален из верхнего уровня, теперь только Alembic или в if __name__)
 
-# Делаем 'enumerate' и новую функцию форматирования даты доступными во всех Jinja2 шаблонах
 @app.context_processor
 def utility_processor():
-    def format_datetime_for_display(dt_str):
-        if not dt_str:
-            return "Н/Д"
-        try:
-            # Сначала парсим из формата БД (YYYY-MM-DD HH:MM:SS)
-            dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-            # Затем форматируем в DD.MM.YYYY HH:MM
-            return dt_obj.strftime('%d.%m.%Y %H:%M')
-        except ValueError:
-            # Если формат не соответствует, пробуем только дату (для last_fee_payment_date)
-            try:
-                dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
-                return dt_obj.strftime('%d.%m.%Y')
-            except ValueError:
-                return dt_str # Возвращаем как есть, если не удалось распарсить
-    
-    def format_date_only_for_display(date_str):
-        if not date_str:
-            return "Н/Д"
-        try:
-            # Парсим из формата БД (YYYY-MM-DD)
-            dt_obj = datetime.strptime(date_str, '%Y-%m-%d')
-            # Форматируем в DD.MM.YYYY
-            return dt_obj.strftime('%d.%m.%Y')
-        except ValueError:
-            return date_str # Возвращаем как есть
-            
-    return dict(enumerate=enumerate, 
-                format_datetime_for_display=format_datetime_for_display,
-                format_date_only_for_display=format_date_only_for_display)
+    return dict(enumerate=enumerate)
 
 # --- Настройка Flask-Login ---
 login_manager = LoginManager()
@@ -78,7 +48,7 @@ class User(db.Model, UserMixin):
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    date = db.Column(db.String(20), nullable=False) # Хранится YYYY-MM-DD HH:MM:SS
+    date = db.Column(db.String(20), nullable=False)
     image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
@@ -106,7 +76,7 @@ class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(150), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    date = db.Column(db.String(20), nullable=False) # Хранится YYYY-MM-DD HH:MM:SS
+    date = db.Column(db.String(20), nullable=False)
     author = db.Column(db.String(80), nullable=False)
 
     def __repr__(self):
@@ -117,7 +87,7 @@ class Poll(db.Model):
     question = db.Column(db.String(255), nullable=False)
     options_json = db.Column(db.Text, nullable=False)
     voted_users_json = db.Column(db.Text, default='[]')
-    date = db.Column(db.String(20), nullable=False) # Хранится YYYY-MM-DD HH:MM:SS
+    date = db.Column(db.String(20), nullable=False)
     author = db.Column(db.String(80), nullable=False)
 
     @property
@@ -171,7 +141,7 @@ def register():
         db.session.add(new_user)
         db.session.commit()
         
-        flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
+        flash('Реєстрація успішна! Тепер ви можете увівійти.', 'success')
         return redirect(url_for('login'))
     
     return render_template('register.html')
@@ -213,12 +183,37 @@ def index():
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
 
     user_events_next_7_days = []
-    if current_user.is_authenticated:
-        now = datetime.now()
-        seven_days_from_now = now + timedelta(days=7)
-        for event in events:
+    
+    # НОВЕ: Список учасників події з назвами команд
+    events_with_team_info = []
+    for event in events:
+        processed_participants = []
+        for p_entry in event.participants:
+            # Знайти назву команди для поточного учасника
+            assigned_team_name = ''
+            for team_name, members in event.teams.items():
+                if p_entry.get("username") in members:
+                    assigned_team_name = team_name
+                    break # Знайшли команду, виходимо
+            
+            # Додаємо інформацію про команду до словника учасника
+            p_entry_with_team = p_entry.copy() # Робимо копію, щоб не змінювати оригінал
+            p_entry_with_team['assigned_team_name'] = assigned_team_name
+            processed_participants.append(p_entry_with_team)
+        
+        # Додаємо оброблений список учасників до події
+        # Це тимчасовий атрибут для шаблону
+        event.processed_participants = processed_participants
+        events_with_team_info.append(event)
+
+
+        # Логіка для "Ваші події на наступні 7 днів"
+        if current_user.is_authenticated:
+            now = datetime.now()
+            seven_days_from_now = now + timedelta(days=7)
+            
             is_participant = False
-            for p_entry in event.participants:
+            for p_entry in event.participants: # Тут використовуємо оригінальний список participants
                 if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
                     is_participant = True
                     break
@@ -232,7 +227,7 @@ def index():
                     continue
     
     return render_template('index.html', 
-                           events=events, 
+                           events=events_with_team_info, # Передаємо оновлені події
                            current_user=current_user, 
                            users_fee_status=users_fee_status,
                            user_events_next_7_days=user_events_next_7_days)
@@ -297,7 +292,7 @@ def edit_event(event_id):
             flash('Будь ласка, заповніть усі поля для події.', 'error')
     
     # Для GET-запроса, готовим данные для формы
-    # Преобразуем формат даты из YYYY-MM-DD HH:MM:SS в YYYY-MM-DDTHH:MM для input datetime-local
+    # Преобразуем формат даты из Jamboree-MM-DD HH:MM:SS в Jamboree-MM-DDTHH:MM для input datetime-local
     if event.date:
         try:
             event_dt_obj = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
@@ -403,7 +398,7 @@ def announcements():
 def polls():
     if request.method == 'POST':
         if not current_user.is_authenticated or not current_user.is_admin():
-            flash('У вас немає дозволу на створення опитувань.', 'error')
+            flash('У вас немає дозволу на создание опитувань.', 'error')
             return redirect(url_for('polls'))
 
         question = request.form['question']
@@ -471,7 +466,7 @@ def vote_poll(poll_id):
 
 # --- Маршруты для управления взносами ---
 
-@app.route('/manage_fees', methods=['GET', 'POST']) # Додано POST для обробки форми
+@app.route('/manage_fees', methods=['GET', 'POST']) 
 @login_required
 def manage_fees():
     if not current_user.is_admin():
@@ -495,9 +490,7 @@ def manage_fees():
                     flash('Недійсний формат дати. Використовуйте РРРР-ММ-ДД.', 'error')
             else:
                 flash('Будь ласка, оберіть користувача та введіть дату.', 'error')
-        else: # Якщо форма відправлена без user_id або fee_date (наприклад, кнопка toggle)
-             # Це потрібно, якщо ви повернули попередню логіку "toggle_fee_status"
-             # Для поточної інтегрованої форми це не потрібно, але краще обробити
+        else:
             pass 
         return redirect(url_for('manage_fees'))
 
@@ -546,8 +539,6 @@ def save_teams(event_id):
             members_str = request.form.get(f'team_members_{team_index}', '').strip()
             if team_name:
                 members = [m.strip() for m in members_str.split(',') if m.strip()]
-                    # Переконайтеся, що учасники існують у списку учасників події
-                    # Це можна перевірити додатково, якщо потрібно
                 new_teams[team_name] = members
     
     event.teams = new_teams
