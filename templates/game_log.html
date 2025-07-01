@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Журнал подій - Клуб спортивних ігор</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Журнал завершених подій</h1>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <a href="{{ url_for('logout') }}">Вийти</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Увійти</a> | 
+                <a href="{{ url_for('register') }}">Зареєструватися</a>
+            {% endif %}
+        </div>
+
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}">Події</a>
+            <a href="{{ url_for('announcements') }}">Оголошення</a>
+            <a href="{{ url_for('polls') }}">Опитування</a>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a> {# НОВЕ ПОСИЛАННЯ #}
+            {% endif %}
+        </nav>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="game-log-list">
+            {% if current_user.is_admin() %}
+                <div class="log-actions">
+                    <a href="{{ url_for('export_game_log') }}" class="small-button download-button">Завантажити журнал подій (CSV)</a>
+                </div>
+                
+                {% if game_logs %}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Подія</th>
+                                <th>Дата</th>
+                                <th>Час логування</th>
+                                <th>Учасники (активні)</th>
+                                <th>Учасники (відмовилися)</th>
+                                <th>Команди</th>
+                                <th>Зображення</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in game_logs %}
+                                <tr>
+                                    <td>{{ log.event_name }}</td>
+                                    <td>{{ format_datetime_for_display(log.event_date) }}</td> {# Застосовано форматування #}
+                                    <td>{{ format_datetime_for_display(log.logged_at) }}</td> {# Застосовано форматування #}
+                                    <td>
+                                        {% if log.active_participants %}
+                                            {{ log.active_participants | join(', ') }}
+                                        {% else %}
+                                            Н/Д
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if log.cancelled_participants %}
+                                            {{ log.cancelled_participants | join(', ') }}
+                                        {% else %}
+                                            Н/Д
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if log.teams %}
+                                            <ul>
+                                            {% for team_name, members in log.teams.items() %}
+                                                <li><strong>{{ team_name }}:</strong> {{ members | join(', ') }}</li>
+                                            {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            Н/Д
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if log.image_url %}
+                                            <img src="{{ log.image_url }}" alt="Зображення події" class="log-event-image">
+                                        {% else %}
+                                            Н/Д
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p>Журнал подій порожній.</p>
+                {% endif %}
+            {% else %}
+                <p class="info-message">У вас немає дозволу на перегляд журналу подій.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

@@ -1,10 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response # Додано make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy 
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta 
 import json 
+import csv # Додано для експорту в CSV
+from io import StringIO # Додано для експорту в CSV
 
 app = Flask(__name__)
 # ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
@@ -101,11 +103,50 @@ class Event(db.Model):
     def __repr__(self):
         return f"Event('{self.name}', '{self.date}')"
 
+# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА СОБЫТИЙ ---
+class GameLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_name = db.Column(db.String(100), nullable=False)
+    event_date = db.Column(db.String(20), nullable=False) # Дата и время события
+    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')) # Время, когда запись попала в лог
+    active_participants_json = db.Column(db.Text, default='[]') # Список активных участников
+    cancelled_participants_json = db.Column(db.Text, default='[]') # Список отказников
+    teams_json = db.Column(db.Text, default='{}') # Информация о командах
+    image_url = db.Column(db.String(255), nullable=True, default=None)
+
+    @property
+    def active_participants(self):
+        return json.loads(self.active_participants_json)
+
+    @active_participants.setter
+    def active_participants(self, value):
+        self.active_participants_json = json.dumps(value, ensure_ascii=False)
+
+    @property
+    def cancelled_participants(self):
+        return json.loads(self.cancelled_participants_json)
+
+    @cancelled_participants.setter
+    def cancelled_participants(self, value):
+        self.cancelled_participants_json = json.dumps(value, ensure_ascii=False)
+
+    @property
+    def teams(self):
+        return json.loads(self.teams_json)
+
+    @teams.setter
+    def teams(self, value):
+        self.teams_json = json.dumps(value, ensure_ascii=False)
+
+    def __repr__(self):
+        return f"GameLog('{self.event_name}', '{self.event_date}')"
+
+
 class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(150), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    date = db.Column(db.String(20), nullable=False) # Хранится Jamboree-MM-DD HH:MM:SS
+    date = db.Column(db.String(20), nullable=False)
     author = db.Column(db.String(80), nullable=False)
 
     def __repr__(self):
@@ -116,7 +157,7 @@ class Poll(db.Model):
     question = db.Column(db.String(255), nullable=False)
     options_json = db.Column(db.Text, nullable=False)
     voted_users_json = db.Column(db.Text, default='[]')
-    date = db.Column(db.String(20), nullable=False) # Хранится Jamboree-MM-DD HH:MM:SS
+    date = db.Column(db.String(20), nullable=False)
     author = db.Column(db.String(80), nullable=False)
 
     @property
@@ -189,10 +230,13 @@ def login():
         if user_found and user_found.check_password(password):
             login_user(user_found)
             
-            # --- ЗМІНА ТУТ: Видаляємо flash повідомлення про внески з логіну ---
-            # Інформація про внески тепер відображається постійно на index сторінці
-            # flash('Вхід успішний!', 'success') # Це повідомлення також прибираємо
-            
+            # --- Персоналізоване повідомлення про внески ---
+            if user_found.has_paid_fees:
+                flash('Вхід успішний! Ми дуже вдячні вам за ваш внесок на підтримку клубу.', 'success')
+            else:
+                flash('Вхід успішний! На жаль, ми ще не отримали від вас членський внесок. Нам буде важко без вашої допомоги організовувати діяльність клубу(', 'info') 
+            # --- Кінець блоку ---
+
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
         else:
@@ -211,51 +255,56 @@ def logout():
 
 @app.route('/')
 def index():
-    events = Event.query.order_by(Event.date).all()
+    # === НОВЕ: Логіка автоматичного логування завершених подій ===
+    current_time = datetime.now()
+    events_to_delete = [] # Події, які потрібно перенести в лог і видалити
+    
+    all_events_from_db = Event.query.order_by(Event.date).all()
+    events_for_display = [] # Події, які будуть відображатися на сторінці (майбутні)
+
+    for event in all_events_from_db:
+        try:
+            event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+            
+            if event_dt < current_time: # Час події минув
+                # Створюємо запис в GameLog
+                active_participants = [p["username"] for p in event.participants if p.get("status") == "active"]
+                cancelled_participants = [p["username"] for p in event.participants if p.get("status") == "cancelled"]
+
+                new_log_entry = GameLog(
+                    event_name=event.name,
+                    event_date=event.date,
+                    active_participants=active_participants, # Зберігаємо як список
+                    cancelled_participants=cancelled_participants, # Зберігаємо як список
+                    teams=event.teams, # Зберігаємо як словник
+                    image_url=event.image_url
+                )
+                db.session.add(new_log_entry)
+                events_to_delete.append(event) # Додаємо подію до списку на видалення
+            else:
+                # Подія ще майбутня, додаємо до списку для відображення
+                events_for_display.append(event)
+        except ValueError:
+            # Якщо дата не парситься, це помилкова подія, можливо, її теж варто видалити або перенести
+            # Для простоти, поки що просто відображаємо, але не логуємо
+            events_for_display.append(event)
+            flash(f"Подія '{event.name}' має невірний формат дати і не може бути автоматично залогована.", 'error')
+            
+    # Видаляємо залоговані події з таблиці Event
+    for event in events_to_delete:
+        db.session.delete(event)
+    
+    db.session.commit() # Зберігаємо всі зміни (додавання логів, видалення подій)
+    # === Кінець логіки автоматичного логування ===
+
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
 
     user_events_next_7_days = []
     
-    # === НОВЕ: Збір актуального статусу внесків для поточного користувача ===
-    # Це дозволить відображати актуальне повідомлення про внески на головній сторінці
-    # навіть після оновлення, якщо користувач не виходив з системи.
-    current_user_fee_message = None
-    if current_user.is_authenticated:
-        current_user_db_info = User.query.get(current_user.id) # Отримуємо актуальні дані з БД
-        if current_user_db_info:
-            if current_user_db_info.has_paid_fees:
-                current_user_fee_message = {
-                    'text': 'Ми дуже вдячні вам за ваш внесок на підтримку клубу.', 
-                    'category': 'success'
-                }
-            else:
-                current_user_fee_message = {
-                    'text': 'На жаль, ми ще не отримали від вас членський внесок. Нам буде важко без вашої допомоги організовувати діяльність клубу(', 
-                    'category': 'info'
-                }
-
-        # Логіка для "Ваші події на наступні 7 днів"
-        now = datetime.now()
-        seven_days_from_now = now + timedelta(days=7)
-        for event in events:
-            is_participant = False
-            for p_entry in event.participants:
-                if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
-                    is_participant = True
-                    break
-            
-            if is_participant:
-                try:
-                    event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
-                    if event_dt >= now and event_dt <= seven_days_from_now:
-                        user_events_next_7_days.append(event)
-                except ValueError:
-                    continue
-    
-    # НОВЕ: Список учасників події з назвами команд (логіка перенесена сюди)
+    # Список учасників події з назвами команд
     events_with_team_info = []
-    for event in events:
+    for event in events_for_display: # Використовуємо events_for_display
         processed_participants = []
         for p_entry in event.participants:
             assigned_team_name = ''
@@ -271,12 +320,32 @@ def index():
         event.processed_participants = processed_participants
         events_with_team_info.append(event)
 
+
+        # Логіка для "Ваші події на наступні 7 днів"
+        if current_user.is_authenticated:
+            now = datetime.now()
+            seven_days_from_now = now + timedelta(days=7)
+            
+            is_participant = False
+            for p_entry in event.participants: # Тут використовуємо оригінальний список participants
+                if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
+                    is_participant = True
+                    break
+            
+            if is_participant:
+                try:
+                    event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+                    if event_dt >= now and event_dt <= seven_days_from_now:
+                        user_events_next_7_days.append(event)
+                except ValueError:
+                    continue
+    
     return render_template('index.html', 
-                           events=events_with_team_info, 
+                           events=events_with_team_info, # Передаємо оновлені події
                            current_user=current_user, 
                            users_fee_status=users_fee_status,
                            user_events_next_7_days=user_events_next_7_days,
-                           current_user_fee_message=current_user_fee_message) # НОВЕ: передаємо повідомлення
+                           current_user_fee_message=current_user_fee_message if 'current_user_fee_message' in locals() else None) # Передаємо повідомлення
 
 @app.route('/add_event', methods=['POST'])
 @login_required
@@ -585,6 +654,8 @@ def save_teams(event_id):
             members_str = request.form.get(f'team_members_{team_index}', '').strip()
             if team_name:
                 members = [m.strip() for m in members_str.split(',') if m.strip()]
+                    # Переконайтеся, що учасники існують у списку учасників події
+                    # Це можна перевірити додатково, якщо потрібно
                 new_teams[team_name] = members
     
     event.teams = new_teams
