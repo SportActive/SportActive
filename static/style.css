@@ -613,3 +613,37 @@ form button:active, .small-button:active {
 .log-actions .download-button:hover {
     background-color: #218838;
 }
+
+/* Стилі для журналу оплат (Fee Log) */
+.fee-log-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.fee-log-list th,
+.fee-log-list td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.fee-log-list th {
+    background-color: #f0f4f7;
+    color: #4a698a;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85em;
+}
+
+.fee-log-list tr:last-child td {
+    border-bottom: none;
+}
+
+.fee-log-list tr:hover {
+    background-color: #f6f9fc;
+}

@@ -17,29 +17,36 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app) 
 
+# db.create_all() (удален из верхнего уровня, теперь только Alembic или в if __name__)
+
 @app.context_processor
 def utility_processor():
     def format_datetime_for_display(dt_str):
         if not dt_str:
             return "Н/Д"
         try:
+            # Сначала парсим из формата БД (YYYY-MM-DD HH:MM:SS)
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+            # Затем форматируем в DD.MM.YYYY HH:MM
             return dt_obj.strftime('%d.%m.%Y %H:%M')
         except ValueError:
+            # Если формат не соответствует, пробуем только дату (для last_fee_payment_date)
             try:
                 dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
                 return dt_obj.strftime('%d.%m.%Y')
             except ValueError:
-                return dt_str
+                return dt_str # Возвращаем как есть, если не удалось распарсить
     
     def format_date_only_for_display(date_str):
         if not date_str:
             return "Н/Д"
         try:
+            # Парсим из формата БД (YYYY-MM-DD)
             dt_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            # Форматируем в DD.MM.YYYY
             return dt_obj.strftime('%d.%m.%Y')
         except ValueError:
-            return date_str
+            return date_str # Возвращаем как есть
             
     return dict(enumerate=enumerate, 
                 format_datetime_for_display=format_datetime_for_display,
@@ -54,10 +61,10 @@ login_manager.login_view = 'login'
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), default='user')
+    password_hash = db.Column(db.String(256), nullable=False) # Увеличено до 256
+    role = db.Column(db.String(20), default='user') # 'user' или 'admin'
     has_paid_fees = db.Column(db.Boolean, default=False)
-    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
+    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None) # Формат IndexError-MM-DD
 
     def is_admin(self):
         return self.role == 'admin'
@@ -71,7 +78,7 @@ class User(db.Model, UserMixin):
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    date = db.Column(db.String(20), nullable=False)
+    date = db.Column(db.String(20), nullable=False) # Хранится Jamboree-MM-DD HH:MM:SS
     image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
@@ -136,7 +143,7 @@ class GameLog(db.Model):
 class FeeLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False)
-    payment_date = db.Column(db.String(10), nullable=False) # Дата оплаты, которую ввел админ
+    payment_date = db.Column(db.String(10), nullable=False) # Дата оплаты, которую ввел админ (ДД-ММ-РРРР)
     logged_by_admin = db.Column(db.String(80), nullable=False) # Кто из админов отметил оплату
     logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')) # Время, когда запись попала в лог
 
@@ -593,11 +600,20 @@ def manage_fees():
                     user.has_paid_fees = True
                     user.last_fee_payment_date = fee_date_str
                     db.session.commit()
+                    # --- НОВЕ: Логування оплати у FeeLog ---
+                    new_fee_log = FeeLog(
+                        username=user.username,
+                        payment_date=fee_date_str,
+                        logged_by_admin=current_user.username
+                    )
+                    db.session.add(new_fee_log)
+                    db.session.commit()
+                    # --- Кінець НОВОГО блоку ---
                     flash(f'Внески для {user.username} від {fee_date_str} успішно записано.', 'success')
                 except ValueError:
                     flash('Недійсний формат дати. Використовуйте РРРР-ММ-ДД.', 'error')
             else:
-                flash('Будь ласка, оберіть користувача та введіть дату.', 'error')
+                flash('Користувача не знайдено.', 'error')
         else:
             pass 
         return redirect(url_for('manage_fees'))
@@ -656,7 +672,7 @@ def save_teams(event_id):
     
     return redirect(url_for('manage_teams', event_id=event.id))
 
-# --- НОВЫЙ МАРШРУТ ДЛЯ ЖУРНАЛА СОБЫТИЙ (GAME LOG) ---
+# --- МАРШРУТЫ ДЛЯ ЖУРНАЛА СОБЫТИЙ (GAME LOG) ---
 @app.route('/game_log')
 @login_required
 def game_log():
@@ -664,8 +680,8 @@ def game_log():
         flash('У вас немає дозволу на перегляд журналу подій.', 'error')
         return redirect(url_for('index'))
     
-    # Загружаем логи игр из БД, сортируем по дате события (сначала новые)
-    game_logs = GameLog.query.order_by(GameLog.logged_at.desc()).all() # Изменил сортировку на logged_at
+    # Загружаем логи игр из БД, сортируем по дате логгирования (сначала новые)
+    game_logs = GameLog.query.order_by(GameLog.logged_at.desc()).all() 
     return render_template('game_log.html', game_logs=game_logs, current_user=current_user)
 
 @app.route('/export_game_log')
@@ -688,11 +704,11 @@ def export_game_log():
     for log in game_logs:
         row = [
             log.event_name,
-            log.event_date, # Дата в формате БД, можно отформатировать
-            log.logged_at,
-            ", ".join(log.active_participants), # Список в строку
-            ", ".join(log.cancelled_participants), # Список в строку
-            json.dumps(log.teams, ensure_ascii=False), # Словарь команд в JSON-строку
+            format_datetime_for_display(log.event_date), # Форматируем дату для CSV
+            format_datetime_for_display(log.logged_at), # Форматируем дату лога для CSV
+            ", ".join(log.active_participants), 
+            ", ".join(log.cancelled_participants), 
+            json.dumps(log.teams, ensure_ascii=False), 
             log.image_url if log.image_url else ""
         ]
         cw.writerow(row)
@@ -703,10 +719,34 @@ def export_game_log():
     response.headers["Content-type"] = "text/csv"
     return response
 
+# --- НОВЫЕ МАРШРУТЫ ДЛЯ ЖУРНАЛА ОПЛАТ (FEE LOG) ---
+@app.route('/fee_log')
+@login_required
+def fee_log():
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на перегляд журналу оплат.', 'error')
+        return redirect(url_for('index'))
+    
+    # Загружаем логи оплат из БД, сортируем по времени логгирования (сначала новые)
+    fee_logs = FeeLog.query.order_by(FeeLog.logged_at.desc()).all()
+    return render_template('fee_log.html', fee_logs=fee_logs, current_user=current_user)
 
-if __name__ == '__main__':
-    # Цей блок запускається тільки при локальному запуску 'python app.py'
-    # На Render, db.create_all() викликається Alembic'ом через release команду
-    with app.app_context(): 
-        db.create_all() 
-    app.run(debug=True)
+@app.route('/export_fee_log')
+@login_required
+def export_fee_log():
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на експорт журналу оплат.', 'error')
+        return redirect(url_for('index'))
+
+    si = StringIO()
+    cw = csv.writer(si)
+
+    headers = [
+        "Користувач", "Дата оплати", "Хто відмітив", "Час логування"
+    ]
+    cw.writerow(headers)
+
+    fee_logs = FeeLog.query.order_by(FeeLog.logged_at.desc()).all()
+    for log in fee_logs:
+        row = [
+            log.username,
