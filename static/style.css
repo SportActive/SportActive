@@ -546,3 +546,70 @@ form button:active, .small-button:active {
     margin-top: 0;
     margin-bottom: 15px;
     color: #2c3e50;
+
+/* Стилі для журналу подій (Game Log) */
+.game-log-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.game-log-list th,
+.game-log-list td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.game-log-list th {
+    background-color: #f0f4f7;
+    color: #4a698a;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85em;
+}
+
+.game-log-list tr:last-child td {
+    border-bottom: none;
+}
+
+.game-log-list tr:hover {
+    background-color: #f6f9fc;
+}
+
+.game-log-list td ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.game-log-list td ul li {
+    padding: 2px 0;
+    border-left: none; /* Удаляем полоску для вложенных списков */
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.log-event-image {
+    max-width: 50px;
+    max-height: 50px;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.log-actions {
+    text-align: right;
+    margin-bottom: 20px;
+}
+
+.log-actions .download-button {
+    background-color: #28a745; /* Зеленая кнопка */
+}
+
+.log-actions .download-button:hover {
+    background-color: #218838;
+}

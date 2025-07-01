@@ -1,15 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, make_response # Додано make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy 
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta 
 import json 
-import csv # Додано для експорту в CSV
-from io import StringIO # Додано для експорту в CSV
+import csv 
+from io import StringIO 
 
 app = Flask(__name__)
-# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -18,36 +17,29 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app) 
 
-# db.create_all() (удален из верхнего уровня, теперь только Alembic или в if __name__)
-
 @app.context_processor
 def utility_processor():
     def format_datetime_for_display(dt_str):
         if not dt_str:
             return "Н/Д"
         try:
-            # Сначала парсим из формата БД (YYYY-MM-DD HH:MM:SS)
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-            # Затем форматируем в DD.MM.YYYY HH:MM
             return dt_obj.strftime('%d.%m.%Y %H:%M')
         except ValueError:
-            # Если формат не соответствует, пробуем только дату (для last_fee_payment_date)
             try:
                 dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
                 return dt_obj.strftime('%d.%m.%Y')
             except ValueError:
-                return dt_str # Возвращаем как есть, если не удалось распарсить
+                return dt_str
     
     def format_date_only_for_display(date_str):
         if not date_str:
             return "Н/Д"
         try:
-            # Парсим из формата БД (YYYY-MM-DD)
             dt_obj = datetime.strptime(date_str, '%Y-%m-%d')
-            # Форматируем в DD.MM.YYYY
             return dt_obj.strftime('%d.%m.%Y')
         except ValueError:
-            return date_str # Возвращаем как есть
+            return date_str
             
     return dict(enumerate=enumerate, 
                 format_datetime_for_display=format_datetime_for_display,
@@ -62,10 +54,10 @@ login_manager.login_view = 'login'
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False) # Увеличено до 256
-    role = db.Column(db.String(20), default='user') # 'user' или 'admin'
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(20), default='user')
     has_paid_fees = db.Column(db.Boolean, default=False)
-    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None) # Формат IndexError-MM-DD
+    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
 
     def is_admin(self):
         return self.role == 'admin'
@@ -79,7 +71,7 @@ class User(db.Model, UserMixin):
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    date = db.Column(db.String(20), nullable=False) # Хранится Jamboree-MM-DD HH:MM:SS
+    date = db.Column(db.String(20), nullable=False)
     image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
@@ -103,15 +95,14 @@ class Event(db.Model):
     def __repr__(self):
         return f"Event('{self.name}', '{self.date}')"
 
-# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА СОБЫТИЙ ---
 class GameLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event_name = db.Column(db.String(100), nullable=False)
-    event_date = db.Column(db.String(20), nullable=False) # Дата и время события
-    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')) # Время, когда запись попала в лог
-    active_participants_json = db.Column(db.Text, default='[]') # Список активных участников
-    cancelled_participants_json = db.Column(db.Text, default='[]') # Список отказников
-    teams_json = db.Column(db.Text, default='{}') # Информация о командах
+    event_date = db.Column(db.String(20), nullable=False)
+    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    active_participants_json = db.Column(db.Text, default='[]')
+    cancelled_participants_json = db.Column(db.Text, default='[]')
+    teams_json = db.Column(db.Text, default='{}')
     image_url = db.Column(db.String(255), nullable=True, default=None)
 
     @property
@@ -140,6 +131,17 @@ class GameLog(db.Model):
 
     def __repr__(self):
         return f"GameLog('{self.event_name}', '{self.event_date}')"
+
+# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА ОПЛАТ ---
+class FeeLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False)
+    payment_date = db.Column(db.String(10), nullable=False) # Дата оплаты, которую ввел админ
+    logged_by_admin = db.Column(db.String(80), nullable=False) # Кто из админов отметил оплату
+    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')) # Время, когда запись попала в лог
+
+    def __repr__(self):
+        return f"FeeLog('{self.username}', '{self.payment_date}', '{self.logged_by_admin}')"
 
 
 class Announcement(db.Model):
@@ -257,44 +259,39 @@ def logout():
 def index():
     # === Логіка автоматичного логування завершених подій ===
     current_time = datetime.now()
-    events_to_delete = [] # Події, які потрібно перенести в лог і видалити
+    events_to_delete = [] 
     
     all_events_from_db = Event.query.order_by(Event.date).all()
-    events_for_display = [] # Події, які будуть відображатися на сторінці (майбутні)
+    events_for_display = [] 
 
     for event in all_events_from_db:
         try:
             event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
             
-            if event_dt < current_time: # Час події минув
-                # Створюємо запис в GameLog
+            if event_dt < current_time: 
                 active_participants = [p["username"] for p in event.participants if p.get("status") == "active"]
                 cancelled_participants = [p["username"] for p in event.participants if p.get("status") == "cancelled"]
 
                 new_log_entry = GameLog(
                     event_name=event.name,
                     event_date=event.date,
-                    active_participants=active_participants, # Зберігаємо як список
-                    cancelled_participants=cancelled_participants, # Зберігаємо як список
-                    teams=event.teams, # Зберігаємо як словник
+                    active_participants=active_participants, 
+                    cancelled_participants=cancelled_participants, 
+                    teams=event.teams, 
                     image_url=event.image_url
                 )
                 db.session.add(new_log_entry)
-                events_to_delete.append(event) # Додаємо подію до списку на видалення
+                events_to_delete.append(event) 
             else:
-                # Подія ще майбутня, додаємо до списку для відображення
                 events_for_display.append(event)
         except ValueError:
-            # Якщо дата не парситься, це помилкова подія, можливо, її теж варто видалити або перенести
-            # Для простоти, поки що просто відображаємо, але не логуємо
             events_for_display.append(event)
             flash(f"Подія '{event.name}' має невірний формат дати і не може бути автоматично залогована.", 'error')
             
-    # Видаляємо залоговані події з таблиці Event
     for event in events_to_delete:
         db.session.delete(event)
     
-    db.session.commit() # Зберігаємо всі зміни (додавання логів, видалення подій)
+    db.session.commit() 
     # === Кінець логіки автоматичного логування ===
 
     all_users = User.query.all()
@@ -302,9 +299,8 @@ def index():
 
     user_events_next_7_days = []
     
-    # Список учасників події з назвами команд
     events_with_team_info = []
-    for event in events_for_display: # Використовуємо events_for_display
+    for event in events_for_display: 
         processed_participants = []
         for p_entry in event.participants:
             assigned_team_name = ''
@@ -321,13 +317,12 @@ def index():
         events_with_team_info.append(event)
 
 
-        # Логіка для "Ваші події на наступні 7 днів"
         if current_user.is_authenticated:
             now = datetime.now()
             seven_days_from_now = now + timedelta(days=7)
             
             is_participant = False
-            for p_entry in event.participants: # Тут використовуємо оригінальний список participants
+            for p_entry in event.participants: 
                 if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
                     is_participant = True
                     break
@@ -341,11 +336,11 @@ def index():
                     continue
     
     return render_template('index.html', 
-                           events=events_with_team_info, # Передаємо оновлені події
+                           events=events_with_team_info, 
                            current_user=current_user, 
                            users_fee_status=users_fee_status,
                            user_events_next_7_days=user_events_next_7_days,
-                           current_user_fee_message=current_user_fee_message if 'current_user_fee_message' in locals() else None) # Передаємо повідомлення
+                           current_user_fee_message=current_user_fee_message if 'current_user_fee_message' in locals() else None)
 
 @app.route('/add_event', methods=['POST'])
 @login_required
@@ -406,14 +401,12 @@ def edit_event(event_id):
         else:
             flash('Будь ласка, заповніть усі поля для події.', 'error')
     
-    # Для GET-запроса, готовим данные для формы
-    # Преобразуем формат даты из Jamboree-MM-DD HH:MM:SS в Jamboree-MM-DDTHH:MM для input datetime-local
     if event.date:
         try:
             event_dt_obj = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
             event.formatted_datetime_local = event_dt_obj.strftime('%Y-%m-%dT%H:%M')
         except ValueError:
-            event.formatted_datetime_local = '' # Если формат даты в БД не соответствует, сбросим
+            event.formatted_datetime_local = ''
     else:
         event.formatted_datetime_local = ''
 
@@ -672,7 +665,7 @@ def game_log():
         return redirect(url_for('index'))
     
     # Загружаем логи игр из БД, сортируем по дате события (сначала новые)
-    game_logs = GameLog.query.order_by(GameLog.event_date.desc()).all()
+    game_logs = GameLog.query.order_by(GameLog.logged_at.desc()).all() # Изменил сортировку на logged_at
     return render_template('game_log.html', game_logs=game_logs, current_user=current_user)
 
 @app.route('/export_game_log')
@@ -691,7 +684,7 @@ def export_game_log():
     ]
     cw.writerow(headers)
 
-    game_logs = GameLog.query.order_by(GameLog.event_date.desc()).all()
+    game_logs = GameLog.query.order_by(GameLog.logged_at.desc()).all()
     for log in game_logs:
         row = [
             log.event_name,
