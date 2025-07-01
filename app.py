@@ -255,7 +255,7 @@ def logout():
 
 @app.route('/')
 def index():
-    # === НОВЕ: Логіка автоматичного логування завершених подій ===
+    # === Логіка автоматичного логування завершених подій ===
     current_time = datetime.now()
     events_to_delete = [] # Події, які потрібно перенести в лог і видалити
     
@@ -662,6 +662,53 @@ def save_teams(event_id):
     flash('Команди успішно збережено!', 'success')
     
     return redirect(url_for('manage_teams', event_id=event.id))
+
+# --- НОВЫЙ МАРШРУТ ДЛЯ ЖУРНАЛА СОБЫТИЙ (GAME LOG) ---
+@app.route('/game_log')
+@login_required
+def game_log():
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на перегляд журналу подій.', 'error')
+        return redirect(url_for('index'))
+    
+    # Загружаем логи игр из БД, сортируем по дате события (сначала новые)
+    game_logs = GameLog.query.order_by(GameLog.event_date.desc()).all()
+    return render_template('game_log.html', game_logs=game_logs, current_user=current_user)
+
+@app.route('/export_game_log')
+@login_required
+def export_game_log():
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на експорт журналу подій.', 'error')
+        return redirect(url_for('index'))
+
+    si = StringIO()
+    cw = csv.writer(si)
+
+    headers = [
+        "Назва події", "Дата події", "Час логування", "Активні учасники", 
+        "Відмовилися учасники", "Команди", "URL зображення"
+    ]
+    cw.writerow(headers)
+
+    game_logs = GameLog.query.order_by(GameLog.event_date.desc()).all()
+    for log in game_logs:
+        row = [
+            log.event_name,
+            log.event_date, # Дата в формате БД, можно отформатировать
+            log.logged_at,
+            ", ".join(log.active_participants), # Список в строку
+            ", ".join(log.cancelled_participants), # Список в строку
+            json.dumps(log.teams, ensure_ascii=False), # Словарь команд в JSON-строку
+            log.image_url if log.image_url else ""
+        ]
+        cw.writerow(row)
+    
+    output = si.getvalue()
+    response = make_response(output)
+    response.headers["Content-Disposition"] = "attachment; filename=game_log.csv"
+    response.headers["Content-type"] = "text/csv"
+    return response
 
 
 if __name__ == '__main__':
