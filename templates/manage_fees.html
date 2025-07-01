@@ -48,7 +48,7 @@
                         <tr>
                             <th>Ім'я користувача</th>
                             <th>Статус внесків</th>
-                            <th>Дата останньої сплати</th> {# НОВА КОЛОНКА #}
+                            <th>Дата останньої сплати</th>
                             <th>Дія</th>
                         </tr>
                     </thead>
@@ -64,11 +64,10 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {# Відображаємо дату, якщо вона є #}
-                                    {{ user.last_fee_payment_date if user.last_fee_payment_date else 'Немає даних' }}
+                                    {# Відображаємо дату, використовуючи функцію форматування #}
+                                    {{ format_date_only_for_display(user.last_fee_payment_date) }} {# ЗМІНА #}
                                 </td>
                                 <td>
-                                    {# Форма для оновлення статусу та дати #}
                                     <form action="{{ url_for('manage_fees') }}" method="POST" class="inline-form">
                                         <input type="hidden" name="user_id" value="{{ user.id }}">
                                         <input type="date" name="fee_date" value="{{ user.last_fee_payment_date if user.last_fee_payment_date else '' }}">

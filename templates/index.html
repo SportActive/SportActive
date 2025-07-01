@@ -65,7 +65,7 @@
                 <ul>
                     {% for event in user_events_next_7_days %}
                         <li>
-                            <strong>{{ event.name }}</strong> <span>( {{ event.date }} )</span>
+                            <strong>{{ event.name }}</strong> <span>( {{ format_datetime_for_display(event.date) }} )</span> {# ЗМІНА #}
                         </li>
                     {% endfor %}
                 </ul>
@@ -85,9 +85,8 @@
                         {% if event.image_url %}
                             <img src="{{ event.image_url }}" alt="{{ event.name }}" class="event-image">
                         {% endif %}
-                        <h3>{{ event.name }} - {{ event.date }}</h3>
+                        <h3>{{ event.name }} - {{ format_datetime_for_display(event.date) }}</h3> {# ЗМІНА #}
                         {% set active_participants_count = 0 %}
-                        {# ТУТ ЗМІНА: Перебираємо processed_participants, які містять team_name #}
                         {% for p_entry in event.processed_participants %}
                             {% if p_entry.status == 'active' %}
                                 {% set active_participants_count = active_participants_count + 1 %}
@@ -97,7 +96,6 @@
                         
                         <h4>Список учасників:</h4>
                         <ul>
-                            {# ТУТ ЗМІНА: Перебираємо processed_participants #}
                             {% for p_entry in event.processed_participants %}
                                 <li>
                                     {{ p_entry.username }} 
@@ -105,13 +103,12 @@
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
                                     
-                                    {# ТУТ ЗМІНА: Виводимо team_name напряму з p_entry #}
                                     {% if p_entry.assigned_team_name %}
                                         <span class="team-name-badge">{{ p_entry.assigned_team_name }}</span>
                                     {% endif %}
 
                                     <span class="participation-info">
-                                        (Запис: {{ p_entry.timestamp | default('Н/Д') }}
+                                        (Запис: {{ format_datetime_for_display(p_entry.timestamp) }}
                                         {% if p_entry.status == 'cancelled' %}
                                             <span class="cancelled-badge">Відмовився</span>
                                         {% endif %})
@@ -121,22 +118,6 @@
                                 <li>Поки що ніхто не зареєструвався.</li>
                             {% endfor %}
                         </ul>
-
-                        {# Блок "Розподіл по командам" ВИДАЛЕНО ЗВІДСИ, ВІН БІЛЬШЕ НЕ ПОТРІБЕН #}
-                        {# {% if event.teams %}
-                            <div class="teams-display">
-                                <h4>Розподіл по командам:</h4>
-                                {% for team_name, members in event.teams.items() %}
-                                    <p><strong>{{ team_name }}:</strong>
-                                        {% if members %}
-                                            {{ members | join(', ') }}
-                                        {% else %}
-                                            (Порожня)
-                                        {% endif %}
-                                    </p>
-                                {% endfor %}
-                            </div>
-                        {% endif %} #}
 
                         {% if current_user.is_authenticated %}
                             <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST">
@@ -156,7 +137,7 @@
                                 </button>
                             </form>
                             {% if current_user.is_admin() %}
-                                <div class="admin-event-actions"> {# НОВИЙ БЛОК ДЛЯ КНОПОК АДМІНА #}
+                                <div class="admin-event-actions">
                                     <a href="{{ url_for('manage_teams', event_id=event.id) }}" class="admin-manage-teams-link small-button">Керувати командами</a>
                                     <a href="{{ url_for('edit_event', event_id=event.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
                                     <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;">

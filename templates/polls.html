@@ -58,17 +58,17 @@
         {% elif current_user.is_authenticated %}
             <p class="info-message">Лише адміністратори можуть створювати опитування.</p>
         {% else %}
-            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб створювати опитування.</p>
+            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійти</a> як адміністратор, щоб створювати опитування.</p>
         {% endif %}
 
 
         <div class="polls-list">
-            <h2>Активні опитування</h2> {# Змінив заголовок #}
+            <h2>Активні опитування</h2>
             {% if polls %}
                 {% for poll in polls %}
                     <div class="poll-card">
                         <h3>{{ poll.question }}</h3>
-                        <p class="poll-meta">Створено: {{ poll.date }} від {{ poll.author }}</p>
+                        <p class="poll-meta">Створено: {{ format_datetime_for_display(poll.date) }} від {{ poll.author }}</p> {# ЗМІНА #}
                         
                         {% if current_user.is_authenticated and current_user.username not in poll.voted_users %}
                             <form action="{{ url_for('vote_poll', poll_id=poll.id) }}" method="POST">

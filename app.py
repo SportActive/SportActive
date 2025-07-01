@@ -189,13 +189,10 @@ def login():
         if user_found and user_found.check_password(password):
             login_user(user_found)
             
-            # --- НОВЕ: Персоналізоване повідомлення про внески ---
-            if user_found.has_paid_fees:
-                flash('Вхід успішний! Ми дуже вдячні вам за ваш внесок на підтримку клубу.', 'success')
-            else:
-                flash('Вхід успішний! На жаль, ми ще не отримали від вас членський внесок. Нам буде важко без вашої допомоги організовувати діяльність клубу(', 'info') 
-            # --- Кінець НОВОГО блоку ---
-
+            # --- ЗМІНА ТУТ: Видаляємо flash повідомлення про внески з логіну ---
+            # Інформація про внески тепер відображається постійно на index сторінці
+            # flash('Вхід успішний!', 'success') # Це повідомлення також прибираємо
+            
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
         else:
@@ -220,36 +217,30 @@ def index():
 
     user_events_next_7_days = []
     
-    # НОВЕ: Список учасників події з назвами команд
-    events_with_team_info = []
-    for event in events:
-        processed_participants = []
-        for p_entry in event.participants:
-            # Знайти назву команди для поточного учасника
-            assigned_team_name = ''
-            for team_name, members in event.teams.items():
-                if p_entry.get("username") in members:
-                    assigned_team_name = team_name
-                    break # Знайшли команду, виходимо
-            
-            # Додаємо інформацію про команду до словника учасника
-            p_entry_with_team = p_entry.copy() # Робимо копію, щоб не змінювати оригінал
-            p_entry_with_team['assigned_team_name'] = assigned_team_name
-            processed_participants.append(p_entry_with_team)
-        
-        # Додаємо оброблений список учасників до події
-        # Це тимчасовий атрибут для шаблону
-        event.processed_participants = processed_participants
-        events_with_team_info.append(event)
-
+    # === НОВЕ: Збір актуального статусу внесків для поточного користувача ===
+    # Це дозволить відображати актуальне повідомлення про внески на головній сторінці
+    # навіть після оновлення, якщо користувач не виходив з системи.
+    current_user_fee_message = None
+    if current_user.is_authenticated:
+        current_user_db_info = User.query.get(current_user.id) # Отримуємо актуальні дані з БД
+        if current_user_db_info:
+            if current_user_db_info.has_paid_fees:
+                current_user_fee_message = {
+                    'text': 'Ми дуже вдячні вам за ваш внесок на підтримку клубу.', 
+                    'category': 'success'
+                }
+            else:
+                current_user_fee_message = {
+                    'text': 'На жаль, ми ще не отримали від вас членський внесок. Нам буде важко без вашої допомоги організовувати діяльність клубу(', 
+                    'category': 'info'
+                }
 
         # Логіка для "Ваші події на наступні 7 днів"
-        if current_user.is_authenticated:
-            now = datetime.now()
-            seven_days_from_now = now + timedelta(days=7)
-            
+        now = datetime.now()
+        seven_days_from_now = now + timedelta(days=7)
+        for event in events:
             is_participant = False
-            for p_entry in event.participants: # Тут використовуємо оригінальний список participants
+            for p_entry in event.participants:
                 if p_entry.get("username") == current_user.username and p_entry.get("status") == "active":
                     is_participant = True
                     break
@@ -262,11 +253,30 @@ def index():
                 except ValueError:
                     continue
     
+    # НОВЕ: Список учасників події з назвами команд (логіка перенесена сюди)
+    events_with_team_info = []
+    for event in events:
+        processed_participants = []
+        for p_entry in event.participants:
+            assigned_team_name = ''
+            for team_name, members in event.teams.items():
+                if p_entry.get("username") in members:
+                    assigned_team_name = team_name
+                    break 
+            
+            p_entry_with_team = p_entry.copy()
+            p_entry_with_team['assigned_team_name'] = assigned_team_name
+            processed_participants.append(p_entry_with_team)
+        
+        event.processed_participants = processed_participants
+        events_with_team_info.append(event)
+
     return render_template('index.html', 
-                           events=events_with_team_info, # Передаємо оновлені події
+                           events=events_with_team_info, 
                            current_user=current_user, 
                            users_fee_status=users_fee_status,
-                           user_events_next_7_days=user_events_next_7_days)
+                           user_events_next_7_days=user_events_next_7_days,
+                           current_user_fee_message=current_user_fee_message) # НОВЕ: передаємо повідомлення
 
 @app.route('/add_event', methods=['POST'])
 @login_required

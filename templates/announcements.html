@@ -59,17 +59,20 @@
 
 
         <div class="announcements-list">
-            <h2>Всі оголошення</h2> {# Змінив заголовок #}
+            <h2>Всі оголошення</h2>
             {% if announcements %}
                 {% for ann in announcements %}
                     <div class="announcement-card">
                         <h3>{{ ann.title }}</h3>
-                        <p class="announcement-meta">Опубліковано: {{ ann.date }} від {{ ann.author }}</p>
+                        <p class="announcement-meta">Опубліковано: {{ format_datetime_for_display(ann.date) }} від {{ ann.author }}</p> {# ЗМІНА #}
                         <p>{{ ann.content | safe }}</p>
                     </div>
                 {% endfor %}
             {% else %}
                 <p>Наразі немає оголошень.</p>
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                    <p>Будь ласка, <a href="{{ url_for('add_announcement') }}">додайте перше оголошення</a>.</p>
+                {% endif %}
             {% endif %}
         </div>
     </div>
