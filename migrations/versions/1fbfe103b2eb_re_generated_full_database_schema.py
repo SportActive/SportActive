@@ -1,8 +1,8 @@
-"""Add email verification fields to User model
+"""Re-generated full database schema
 
-Revision ID: 71fe19308041
-Revises: 830d4086a2d4
-Create Date: 2025-07-02 22:22:07.048120
+Revision ID: 1fbfe103b2eb
+Revises: 
+Create Date: 2025-07-02 22:37:24.300735
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '71fe19308041'
-down_revision: Union[str, Sequence[str], None] = '830d4086a2d4'
+revision: str = '1fbfe103b2eb'
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

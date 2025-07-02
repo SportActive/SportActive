@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy 
-from flask_mail import Mail, Message # НОВЕ: Імпортуємо для відправки email
+from flask_mail import Mail, Message 
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta 
@@ -17,8 +17,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app) 
-
-# db.create_all() (удален из верхнего уровня, теперь только Alembic или в if __name__)
 
 @app.context_processor
 def utility_processor():
@@ -53,16 +51,16 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# --- НОВЕ: Налаштування Flask-Mail ---
+# --- Налаштування Flask-Mail ---
 # Дані беруться зі змінних оточення Render
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1']
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'aktivnosportivnimi@gmail.com') # Ваша пошта для відправки
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your_app_password') # Ваш пароль додатка або пароль SMTP
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'aktivnosportivnimi@gmail.com') 
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your_app_password') 
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'aktivnosportivnimi@gmail.com')
 
-mail = Mail(app) # Ініціалізуємо Flask-Mail
+mail = Mail(app) 
 
 
 # --- Модели базы данных ---
@@ -76,7 +74,7 @@ class User(db.Model, UserMixin):
     # НОВІ ПОЛЯ ДЛЯ EMAIL-ПІДТВЕРДЖЕННЯ
     email = db.Column(db.String(120), unique=True, nullable=False)
     email_confirmed = db.Column(db.Boolean, default=False)
-    email_confirmation_token = db.Column(db.String(256), nullable=True) # Токен для підтвердження
+    email_confirmation_token = db.Column(db.String(256), nullable=True) 
 
     def is_admin(self):
         return self.role == 'admin'
@@ -217,15 +215,15 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        email = request.form['email'] # НОВЕ: Отримуємо email
+        email = request.form['email'] 
 
         existing_user = User.query.filter_by(username=username).first()
-        existing_email = User.query.filter_by(email=email).first() # НОВЕ: Перевірка email
+        existing_email = User.query.filter_by(email=email).first()
         
         if existing_user:
             flash('Користувач з таким ім\'ям вже існує.', 'error')
             return render_template('register.html')
-        if existing_email: # НОВЕ: Повідомлення про існуючий email
+        if existing_email:
             flash('Ця електронна пошта вже зареєстрована.', 'error')
             return render_template('register.html')
 
@@ -235,15 +233,13 @@ def register():
         is_first_user = (User.query.count() == 0)
         new_user_role = 'admin' if is_first_user else 'user' 
         
-        # НОВЕ: Зберігаємо email, email_confirmed=False, генеруємо токен
-        confirmation_token = os.urandom(24).hex() # Простий токен, можна використовувати UUID
+        confirmation_token = os.urandom(24).hex() 
         new_user = User(username=username, password_hash=hashed_password, role=new_user_role, 
                         has_paid_fees=False, email=email, email_confirmed=False, 
                         email_confirmation_token=confirmation_token)
         db.session.add(new_user)
         db.session.commit()
         
-        # --- НОВЕ: Надсилаємо лист підтвердження ---
         try:
             confirm_url = url_for('confirm_email', token=confirmation_token, _external=True)
             msg = Message('Будь ласка, підтвердьте свою електронну пошту', 
@@ -264,7 +260,6 @@ def register():
             flash('Реєстрація успішна! На вашу електронну пошту було надіслано лист для підтвердження. Будь ласка, перевірте свою скриньку.', 'success')
         except Exception as e:
             flash(f'Реєстрація успішна, але не вдалося надіслати лист підтвердження: {e}. Будь ласка, зв\'яжіться з адміністратором.', 'warning')
-        # --- Кінець НОВОГО блоку ---
 
         return redirect(url_for('login'))
     
@@ -282,11 +277,9 @@ def login():
         user_found = User.query.filter_by(username=username).first()
         
         if user_found and user_found.check_password(password):
-            # --- НОВЕ: Перевірка статусу підтвердження email ---
             if not user_found.email_confirmed:
                 flash('Будь ласка, підтвердьте свою електронну пошту, щоб увійти.', 'warning')
                 return redirect(url_for('login'))
-            # --- Кінець НОВОГО блоку ---
 
             login_user(user_found)
             
@@ -309,13 +302,12 @@ def logout():
     flash('Ви вийшли з системи.', 'info')
     return redirect(url_for('index'))
 
-# --- НОВИЙ МАРШРУТ: ПІДТВЕРДЖЕННЯ EMAIL ---
 @app.route('/confirm/<token>')
 def confirm_email(token):
     user = User.query.filter_by(email_confirmation_token=token).first()
     if user:
         user.email_confirmed = True
-        user.email_confirmation_token = None # Очищаємо токен після підтвердження
+        user.email_confirmation_token = None
         db.session.commit()
         flash('Ваша електронна пошта успішно підтверджена! Тепер ви можете увійти.', 'success')
         return redirect(url_for('login'))
