@@ -97,7 +97,7 @@
                                     {% for team_name, members in event.teams.items() %}
                                         {% if p_entry.username in members %}
                                             {% set assigned_team_name = team_name %}
-                                            {% break %} 
+                                            {# % break % #} 
                                         {% endif %}
                                     {% endfor %}
 
