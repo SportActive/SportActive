@@ -28,6 +28,8 @@
             <a href="{{ url_for('polls') }}">Опитування</a>
             {% if current_user.is_authenticated and current_user.is_admin() %}
                 <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
+                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
             {% endif %}
         </nav>
 
@@ -64,14 +66,15 @@
                 {% for ann in announcements %}
                     <div class="announcement-card">
                         <h3>{{ ann.title }}</h3>
-                        <p class="announcement-meta">Опубліковано: {{ format_datetime_for_display(ann.date) }} від {{ ann.author }}</p> {# ЗМІНА #}
+                        <p class="announcement-meta">Опубліковано: {{ format_datetime_for_display(ann.date) }} від {{ ann.author }}</p>
                         <p>{{ ann.content | safe }}</p>
                     </div>
                 {% endfor %}
             {% else %}
                 <p>Наразі немає оголошень.</p>
+                {# ЗМІНА ТУТ: Посилання на "Додати перше оголошення" веде на сам маршрут 'announcements' #}
                 {% if current_user.is_authenticated and current_user.is_admin() %}
-                    <p>Будь ласка, <a href="{{ url_for('add_announcement') }}">додайте перше оголошення</a>.</p>
+                    <p>Будь ласка, <a href="{{ url_for('announcements') }}">додайте перше оголошення</a>.</p>
                 {% endif %}
             {% endif %}
         </div>
