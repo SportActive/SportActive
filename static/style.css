@@ -148,7 +148,7 @@ form button:active, .small-button:active, .dropbtn:active {
     border: 1px solid #e0e9f0;
     border-radius: 10px;
     padding: 25px;
-    margin-bottom: 20px;
+    margin-bottom: 20px; /* Отступ между карточками */
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     position: relative;
@@ -403,8 +403,6 @@ form button:active, .small-button:active, .dropbtn:active {
 .dropdown:hover .dropdown-content {
     display: block; /* Показываем меню при наведении на dropdown */
 }
-/* Если хотим, чтобы меню открывалось по клику, а не по наведению,
-   понадобится JavaScript */
 
 
 /* --- Стилі для Оголошень --- */
