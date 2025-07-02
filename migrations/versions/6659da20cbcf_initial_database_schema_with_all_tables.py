@@ -1,8 +1,8 @@
-"""Initial database schema
+"""Initial database schema with all tables
 
-Revision ID: 4446bc5135c4
+Revision ID: 6659da20cbcf
 Revises: 
-Create Date: 2025-07-02 13:26:35.611541
+Create Date: 2025-07-02 14:18:34.942234
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '4446bc5135c4'
+revision: str = '6659da20cbcf'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -36,6 +36,14 @@ def upgrade() -> None:
     sa.Column('image_url', sa.String(length=255), nullable=True),
     sa.Column('participants_json', sa.Text(), nullable=True),
     sa.Column('teams_json', sa.Text(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('fee_log',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('username', sa.String(length=80), nullable=False),
+    sa.Column('payment_date', sa.String(length=10), nullable=False),
+    sa.Column('logged_by_admin', sa.String(length=80), nullable=False),
+    sa.Column('logged_at', sa.String(length=20), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('game_log',
@@ -77,6 +85,7 @@ def downgrade() -> None:
     op.drop_table('user')
     op.drop_table('poll')
     op.drop_table('game_log')
+    op.drop_table('fee_log')
     op.drop_table('event')
     op.drop_table('announcement')
     # ### end Alembic commands ###
