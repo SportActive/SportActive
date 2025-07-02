@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, make_response # Додано make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy 
 import os
@@ -140,13 +140,12 @@ class GameLog(db.Model):
     def __repr__(self):
         return f"GameLog('{self.event_name}', '{self.event_date}')"
 
-# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА ОПЛАТ ---
 class FeeLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False)
-    payment_date = db.Column(db.String(10), nullable=False) # Дата оплаты, которую ввел админ (ДД-ММ-РРРР)
-    logged_by_admin = db.Column(db.String(80), nullable=False) # Кто из админов отметил оплату
-    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')) # Время, когда запись попала в лог
+    payment_date = db.Column(db.String(10), nullable=False)
+    logged_by_admin = db.Column(db.String(80), nullable=False)
+    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
     def __repr__(self):
         return f"FeeLog('{self.username}', '{self.payment_date}', '{self.logged_by_admin}')"
@@ -240,12 +239,10 @@ def login():
         if user_found and user_found.check_password(password):
             login_user(user_found)
             
-            # --- Персоналізоване повідомлення про внески ---
             if user_found.has_paid_fees:
                 flash('Вхід успішний! Ми дуже вдячні вам за ваш внесок на підтримку клубу.', 'success')
             else:
                 flash('Вхід успішний! На жаль, ми ще не отримали від вас членський внесок. Нам буде важко без вашої допомоги організовувати діяльність клубу(', 'info') 
-            # --- Кінець блоку ---
 
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
@@ -350,13 +347,18 @@ def index():
                            user_events_next_7_days=user_events_next_7_days,
                            current_user_fee_message=current_user_fee_message if 'current_user_fee_message' in locals() else None)
 
-@app.route('/add_event', methods=['POST'])
+@app.route('/add_event', methods=['GET', 'POST'])
 @login_required
 def add_event():
     if not current_user.is_admin():
         flash('У вас немає дозволу на додавання подій.', 'error')
         return redirect(url_for('index'))
 
+    # Якщо це GET-запит, просто відображаємо форму
+    if request.method == 'GET':
+        return render_template('add_event.html', current_user=current_user) # НОВЕ: відображаємо add_event.html
+
+    # Якщо це POST-запит, обробляємо дані форми
     event_name = request.form['event_name']
     event_datetime_str = request.form['event_datetime'] 
     image_url = request.form.get('image_url') 
@@ -367,15 +369,16 @@ def add_event():
             formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
         except ValueError:
             flash('Неправильний формат дати або часу. Використовуйте РРРР-ММ-ДД HH:MM.', 'error')
-            return redirect(url_for('index'))
+            return render_template('add_event.html', current_user=current_user) # НОВЕ: повертаємо на форму з помилкою
 
         new_event = Event(name=event_name, date=formatted_datetime, participants_json='[]', teams_json='{}', image_url=image_url if image_url else None)
         db.session.add(new_event)
         db.session.commit()
         flash('Подію успішно додано!', 'success')
+        return redirect(url_for('index'))
     else:
         flash('Будь ласка, заповніть усі поля для події.', 'error')
-    return redirect(url_for('index'))
+        return render_template('add_event.html', current_user=current_user) # НОВЕ: повертаємо на форму з помилкою
 
 # --- МАРШРУТ ДЛЯ РЕДАКТИРОВАНИЯ СОБЫТИЯ ---
 @app.route('/edit_event/<int:event_id>', methods=['GET', 'POST'])
@@ -681,7 +684,6 @@ def game_log():
         flash('У вас немає дозволу на перегляд журналу подій.', 'error')
         return redirect(url_for('index'))
     
-    # Загружаем логи игр из БД, сортируем по дате логгирования (сначала новые)
     game_logs = GameLog.query.order_by(GameLog.logged_at.desc()).all() 
     return render_template('game_log.html', game_logs=game_logs, current_user=current_user)
 
@@ -705,8 +707,8 @@ def export_game_log():
     for log in game_logs:
         row = [
             log.event_name,
-            format_datetime_for_display(log.event_date), # Форматируем дату для CSV
-            format_datetime_for_display(log.logged_at), # Форматируем дату лога для CSV
+            format_datetime_for_display(log.event_date), 
+            format_datetime_for_display(log.logged_at), 
             ", ".join(log.active_participants), 
             ", ".join(log.cancelled_participants), 
             json.dumps(log.teams, ensure_ascii=False), 
@@ -715,7 +717,7 @@ def export_game_log():
         cw.writerow(row)
     
     output = si.getvalue()
-    response = make_response('\ufeff' + output) # Добавлено '\ufeff' для UTF-8 BOM
+    response = make_response('\ufeff' + output) 
     response.headers["Content-Disposition"] = "attachment; filename=game_log.csv"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
@@ -750,14 +752,14 @@ def export_fee_log():
     for log in fee_logs:
         row = [
             log.username,
-            format_date_only_for_display(log.payment_date), # Форматируем дату оплаты
+            format_date_only_for_display(log.payment_date), 
             log.logged_by_admin,
-            format_datetime_for_display(log.logged_at) # Форматируем время лога
+            format_datetime_for_display(log.logged_at) 
         ]
         cw.writerow(row)
     
     output = si.getvalue()
-    response = make_response('\ufeff' + output) # Добавлено '\ufeff' для UTF-8 BOM
+    response = make_response('\ufeff' + output) 
     response.headers["Content-Disposition"] = "attachment; filename=fee_log.csv"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
