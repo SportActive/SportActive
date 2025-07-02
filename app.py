@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response # Додано make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy 
 import os
@@ -9,6 +9,7 @@ import csv
 from io import StringIO 
 
 app = Flask(__name__)
+# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -25,23 +26,28 @@ def utility_processor():
         if not dt_str:
             return "Н/Д"
         try:
+            # Сначала парсим из формата БД (YYYY-MM-DD HH:MM:SS)
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+            # Затем форматируем в DD.MM.YYYY HH:MM
             return dt_obj.strftime('%d.%m.%Y %H:%M')
         except ValueError:
+            # Если формат не соответствует, пробуем только дату (для last_fee_payment_date)
             try:
                 dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
                 return dt_obj.strftime('%d.%m.%Y')
             except ValueError:
-                return dt_str
+                return dt_str # Возвращаем как есть, если не удалось распарсить
     
     def format_date_only_for_display(date_str):
         if not date_str:
             return "Н/Д"
         try:
+            # Парсим из формата БД (YYYY-MM-DD)
             dt_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            # Форматируем в DD.MM.YYYY
             return dt_obj.strftime('%d.%m.%Y')
         except ValueError:
-            return date_str
+            return date_str # Возвращаем как есть
             
     return dict(enumerate=enumerate, 
                 format_datetime_for_display=format_datetime_for_display,
@@ -53,10 +59,6 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # --- Модели базы данных ---
-# ВАЖНО: Всі моделі повинні бути оголошені до db = SQLAlchemy(app) або бути імпортовані
-# у env.py, щоб Alembic їх побачив. У нашому випадку вони всі в app.py, тому
-# просто переконайтеся, що всі класи db.Model визначені тут.
-
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -713,9 +715,9 @@ def export_game_log():
         cw.writerow(row)
     
     output = si.getvalue()
-    response = make_response(output)
+    response = make_response('\ufeff' + output) # Добавлено '\ufeff' для UTF-8 BOM
     response.headers["Content-Disposition"] = "attachment; filename=game_log.csv"
-    response.headers["Content-type"] = "text/csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
 # --- НОВЫЕ МАРШРУТЫ ДЛЯ ЖУРНАЛА ОПЛАТ (FEE LOG) ---
@@ -726,7 +728,6 @@ def fee_log():
         flash('У вас немає дозволу на перегляд журналу оплат.', 'error')
         return redirect(url_for('index'))
     
-    # Загружаем логи оплат из БД, сортируем по времени логгирования (сначала новые)
     fee_logs = FeeLog.query.order_by(FeeLog.logged_at.desc()).all()
     return render_template('fee_log.html', fee_logs=fee_logs, current_user=current_user)
 
@@ -756,9 +757,9 @@ def export_fee_log():
         cw.writerow(row)
     
     output = si.getvalue()
-    response = make_response(output)
+    response = make_response('\ufeff' + output) # Добавлено '\ufeff' для UTF-8 BOM
     response.headers["Content-Disposition"] = "attachment; filename=fee_log.csv"
-    response.headers["Content-type"] = "text/csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
 
