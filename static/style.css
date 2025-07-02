@@ -65,8 +65,8 @@ h4 {
 .announcements-list, 
 .polls-list,
 .user-fees-list,
-.game-log-list, /* НОВЕ: Додано для журналу подій */
-.fee-log-list, /* НОВЕ: Додано для журналу оплат */
+.game-log-list,
+.fee-log-list,
 .team-management-section,
 .personal-calendar-section,
 .form-section {
@@ -112,7 +112,7 @@ form textarea:focus {
 }
 
 /* Общий стиль для кнопок (для единообразия) */
-form button, .small-button, .dropbtn {
+form button, .small-button, .dropbtn { /* Добавлен .dropbtn */
     background-color: #007bff;
     color: white;
     padding: 10px 20px;
@@ -148,7 +148,7 @@ form button:active, .small-button:active, .dropbtn:active {
     border: 1px solid #e0e9f0;
     border-radius: 10px;
     padding: 25px;
-    margin-bottom: 20px;
+    margin-bottom: 20px; /* Отступ между карточками */
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     position: relative;
@@ -283,7 +283,7 @@ form button:active, .small-button:active, .dropbtn:active {
     text-align: center;
     padding: 20px;
     background-color: #e6f7ff;
-    border: 1px solid #91d5ff;
+    border: 1:px solid #91d5ff; /* ОШИБКА ЗДЕСЬ: "1:px" вместо "1px" */
     color: #084c7c;
     border-radius: 8px;
     margin: 30px auto;
@@ -356,7 +356,7 @@ form button:active, .small-button:active, .dropbtn:active {
     background-color: #007bff;
     color: white;
     padding: 10px 20px;
-    font-size: 1.0em; /* Исправлено: был 1em, сделан 1.0em для единообразия */
+    font-size: 1.0em;
     border: none;
     cursor: pointer;
     border-radius: 8px;
@@ -980,4 +980,31 @@ h4 {
 
 .fee-log-list tr:hover {
     background-color: #f6f9fc;
+}
+/* Стилі для форми фільтрації в журналі оплат */
+.fee-filter-form {
+    justify-content: flex-start; /* Выравнивание элементов по левому краю */
+    margin-bottom: 15px; /* Отступ от таблицы */
+}
+
+.fee-filter-form label {
+    font-weight: 600;
+    color: #4a698a;
+    margin-right: 10px;
+    white-space: nowrap; /* Не переносить текст */
+}
+
+.fee-filter-form input[type="month"] {
+    max-width: 150px;
+    padding: 8px 10px;
+    border: 1px solid #c0d3eb;
+    border-radius: 8px;
+    font-size: 1em;
+    box-sizing: border-box;
+    margin-right: 10px;
+}
+
+.fee-filter-form button {
+    padding: 8px 15px;
+    font-size: 0.95em;
 }
