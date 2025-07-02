@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy 
+from flask_mail import Mail, Message # НОВЕ: Імпортуємо для відправки email
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta 
@@ -9,7 +10,6 @@ import csv
 from io import StringIO 
 
 app = Flask(__name__)
-# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -26,28 +26,23 @@ def utility_processor():
         if not dt_str:
             return "Н/Д"
         try:
-            # Сначала парсим из формата БД (YYYY-MM-DD HH:MM:SS)
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-            # Затем форматируем в DD.MM.YYYY HH:MM
             return dt_obj.strftime('%d.%m.%Y %H:%M')
         except ValueError:
-            # Если формат не соответствует, пробуем только дату (для last_fee_payment_date)
             try:
                 dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
                 return dt_obj.strftime('%d.%m.%Y')
             except ValueError:
-                return dt_str # Возвращаем как есть, если не удалось распарсить
+                return dt_str
     
     def format_date_only_for_display(date_str):
         if not date_str:
             return "Н/Д"
         try:
-            # Парсим из формата БД (YYYY-MM-DD)
             dt_obj = datetime.strptime(date_str, '%Y-%m-%d')
-            # Форматируем в DD.MM.YYYY
             return dt_obj.strftime('%d.%m.%Y')
         except ValueError:
-            return date_str # Возвращаем как есть
+            return date_str
             
     return dict(enumerate=enumerate, 
                 format_datetime_for_display=format_datetime_for_display,
@@ -58,14 +53,30 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# --- НОВЕ: Налаштування Flask-Mail ---
+# Дані беруться зі змінних оточення Render
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1']
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'aktivnosportivnimi@gmail.com') # Ваша пошта для відправки
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your_app_password') # Ваш пароль додатка або пароль SMTP
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'aktivnosportivnimi@gmail.com')
+
+mail = Mail(app) # Ініціалізуємо Flask-Mail
+
+
 # --- Модели базы данных ---
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False) # Увеличено до 256
-    role = db.Column(db.String(20), default='user') # 'user' или 'admin'
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(20), default='user')
     has_paid_fees = db.Column(db.Boolean, default=False)
-    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None) # Формат IndexError-MM-DD
+    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
+    # НОВІ ПОЛЯ ДЛЯ EMAIL-ПІДТВЕРДЖЕННЯ
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    email_confirmed = db.Column(db.Boolean, default=False)
+    email_confirmation_token = db.Column(db.String(256), nullable=True) # Токен для підтвердження
 
     def is_admin(self):
         return self.role == 'admin'
@@ -74,12 +85,12 @@ class User(db.Model, UserMixin):
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
-        return f"User('{self.username}', '{self.role}')"
+        return f"User('{self.username}', '{self.email}', '{self.email_confirmed}')"
 
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    date = db.Column(db.String(20), nullable=False) # Хранится Jamboree-MM-DD HH:MM:SS
+    date = db.Column(db.String(20), nullable=False)
     image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
@@ -206,22 +217,55 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        email = request.form['email'] # НОВЕ: Отримуємо email
 
         existing_user = User.query.filter_by(username=username).first()
+        existing_email = User.query.filter_by(email=email).first() # НОВЕ: Перевірка email
+        
         if existing_user:
             flash('Користувач з таким ім\'ям вже існує.', 'error')
             return render_template('register.html')
+        if existing_email: # НОВЕ: Повідомлення про існуючий email
+            flash('Ця електронна пошта вже зареєстрована.', 'error')
+            return render_template('register.html')
+
 
         hashed_password = generate_password_hash(password)
         
         is_first_user = (User.query.count() == 0)
         new_user_role = 'admin' if is_first_user else 'user' 
         
-        new_user = User(username=username, password_hash=hashed_password, role=new_user_role, has_paid_fees=False)
+        # НОВЕ: Зберігаємо email, email_confirmed=False, генеруємо токен
+        confirmation_token = os.urandom(24).hex() # Простий токен, можна використовувати UUID
+        new_user = User(username=username, password_hash=hashed_password, role=new_user_role, 
+                        has_paid_fees=False, email=email, email_confirmed=False, 
+                        email_confirmation_token=confirmation_token)
         db.session.add(new_user)
         db.session.commit()
         
-        flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
+        # --- НОВЕ: Надсилаємо лист підтвердження ---
+        try:
+            confirm_url = url_for('confirm_email', token=confirmation_token, _external=True)
+            msg = Message('Будь ласка, підтвердьте свою електронну пошту', 
+                          sender=app.config['MAIL_DEFAULT_SENDER'],
+                          recipients=[email])
+            msg.body = f"""Привіт, {username}!
+
+Дякуємо за реєстрацію в Клубі спортивних ігор.
+Будь ласка, підтвердьте свою електронну пошту, перейшовши за посиланням:
+{confirm_url}
+
+Якщо ви не реєструвалися на цьому сайті, будь ласка, проігноруйте цей лист.
+
+З повагою,
+Команда Клубу спортивних ігор
+"""
+            mail.send(msg)
+            flash('Реєстрація успішна! На вашу електронну пошту було надіслано лист для підтвердження. Будь ласка, перевірте свою скриньку.', 'success')
+        except Exception as e:
+            flash(f'Реєстрація успішна, але не вдалося надіслати лист підтвердження: {e}. Будь ласка, зв\'яжіться з адміністратором.', 'warning')
+        # --- Кінець НОВОГО блоку ---
+
         return redirect(url_for('login'))
     
     return render_template('register.html')
@@ -238,6 +282,12 @@ def login():
         user_found = User.query.filter_by(username=username).first()
         
         if user_found and user_found.check_password(password):
+            # --- НОВЕ: Перевірка статусу підтвердження email ---
+            if not user_found.email_confirmed:
+                flash('Будь ласка, підтвердьте свою електронну пошту, щоб увійти.', 'warning')
+                return redirect(url_for('login'))
+            # --- Кінець НОВОГО блоку ---
+
             login_user(user_found)
             
             if user_found.has_paid_fees:
@@ -258,6 +308,21 @@ def logout():
     logout_user()
     flash('Ви вийшли з системи.', 'info')
     return redirect(url_for('index'))
+
+# --- НОВИЙ МАРШРУТ: ПІДТВЕРДЖЕННЯ EMAIL ---
+@app.route('/confirm/<token>')
+def confirm_email(token):
+    user = User.query.filter_by(email_confirmation_token=token).first()
+    if user:
+        user.email_confirmed = True
+        user.email_confirmation_token = None # Очищаємо токен після підтвердження
+        db.session.commit()
+        flash('Ваша електронна пошта успішно підтверджена! Тепер ви можете увійти.', 'success')
+        return redirect(url_for('login'))
+    else:
+        flash('Недійсний або прострочений токен підтвердження.', 'error')
+        return redirect(url_for('login'))
+
 
 # --- Основные маршруты приложения ---
 
@@ -298,7 +363,6 @@ def index():
         db.session.delete(event)
     
     db.session.commit() 
-    # === Кінець логіки автоматичного логування ===
 
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
@@ -485,9 +549,8 @@ def toggle_participation(event_id):
 # --- Маршруты для объявлений ---
 
 @app.route('/announcements', methods=['GET', 'POST'])
-@login_required # Только авторизованные пользователи могут видеть объявления
+@login_required 
 def announcements():
-    # Если это POST-запрос, это попытка добавить объявление
     if request.method == 'POST':
         if not current_user.is_admin():
             flash('У вас немає дозволу на додавання оголошень.', 'error')
@@ -509,14 +572,13 @@ def announcements():
         else:
             flash('Будь ласка, заповніть усі поля для оголошення.', 'error')
     
-    # Для GET-запроса, или после POST-запроса, отображаем объявления
     ann = Announcement.query.order_by(Announcement.date.desc()).all()
     return render_template('announcements.html', announcements=ann, current_user=current_user)
 
 # --- Маршруты для опросов ---
 
 @app.route('/polls', methods=['GET', 'POST'])
-@login_required # Только авторизованные пользователи могут видеть опросы
+@login_required 
 def polls():
     if request.method == 'POST':
         if not current_user.is_admin():
@@ -687,8 +749,14 @@ def game_log():
         flash('У вас немає дозволу на перегляд журналу подій.', 'error')
         return redirect(url_for('index'))
     
-    game_logs = GameLog.query.order_by(GameLog.logged_at.desc()).all() 
-    return render_template('game_log.html', game_logs=game_logs, current_user=current_user)
+    period_filter = request.args.get('period', '').strip()
+
+    query = GameLog.query
+    if period_filter:
+        query = query.filter(GameLog.event_date.startswith(period_filter))
+
+    game_logs = query.order_by(GameLog.logged_at.desc()).all() 
+    return render_template('game_log.html', game_logs=game_logs, current_user=current_user, period_filter=period_filter)
 
 @app.route('/export_game_log')
 @login_required
@@ -696,6 +764,8 @@ def export_game_log():
     if not current_user.is_admin():
         flash('У вас немає дозволу на експорт журналу подій.', 'error')
         return redirect(url_for('index'))
+
+    period_filter = request.args.get('period', '').strip()
 
     si = StringIO()
     cw = csv.writer(si)
@@ -706,7 +776,11 @@ def export_game_log():
     ]
     cw.writerow(headers)
 
-    game_logs = GameLog.query.order_by(GameLog.logged_at.desc()).all()
+    query = GameLog.query
+    if period_filter:
+        query = query.filter(GameLog.event_date.startswith(period_filter))
+
+    game_logs = query.order_by(GameLog.logged_at.desc()).all()
     for log in game_logs:
         row = [
             log.event_name,
@@ -733,10 +807,8 @@ def fee_log():
         flash('У вас немає дозволу на перегляд журналу оплат.', 'error')
         return redirect(url_for('index'))
     
-    # Отримуємо параметр period_filter з запиту, якщо він є
     period_filter = request.args.get('period', '').strip()
 
-    # Загружаем логи оплат из БД, сортируем по времени логгирования (сначала новые)
     query = FeeLog.query
     if period_filter:
         query = query.filter(FeeLog.payment_period == period_filter) 
@@ -751,7 +823,6 @@ def export_fee_log():
         flash('У вас немає дозволу на експорт журналу оплат.', 'error')
         return redirect(url_for('index'))
 
-    # Отримуємо параметр period_filter з запиту, якщо він є
     period_filter = request.args.get('period', '').strip()
 
     si = StringIO()
@@ -762,7 +833,6 @@ def export_fee_log():
     ]
     cw.writerow(headers)
 
-    # Фільтруємо за періодом, якщо він вказаний
     query = FeeLog.query
     if period_filter:
         query = query.filter(FeeLog.payment_period == period_filter) 

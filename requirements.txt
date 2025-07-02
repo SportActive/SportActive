@@ -13,3 +13,4 @@ Flask-SQLAlchemy
 psycopg2-binary
 #
 alembic # <--- ПЕРЕВІРТЕ НАЯВНІСТЬ ЦЬОГО РЯДКА
+Flask-Mail
