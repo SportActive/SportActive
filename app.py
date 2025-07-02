@@ -59,7 +59,7 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'aktivnosportivnim
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your_app_password')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'aktivnosportivnimi@gmail.com')
 
-mail = Mail(app) 
+mail = Mail(app)
 
 
 # --- Модели базы данных ---
@@ -69,8 +69,8 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), default='user')
     has_paid_fees = db.Column(db.Boolean, default=False)
-    last_fee_payment_date = db.Column(db.String(10), nullable=False, default=None)
-    email = db.Column(db.String(120), unique=True, nullable=True) # ЗМІНА: nullable=True для коректної міграції
+    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
+    email = db.Column(db.String(120), unique=True, nullable=False) # ЗМІНА: nullable=True для коректної міграції
     email_confirmed = db.Column(db.Boolean, default=False)
     email_confirmation_token = db.Column(db.String(256), nullable=True)
 
@@ -564,6 +564,46 @@ def announcements():
     
     ann = Announcement.query.order_by(Announcement.date.desc()).all()
     return render_template('announcements.html', announcements=ann, current_user=current_user)
+
+# --- НОВЫЙ МАРШРУТ ДЛЯ РЕДАКТИРОВАНИЯ ОБЪЯВЛЕНИЯ ---
+@app.route('/edit_announcement/<int:announcement_id>', methods=['GET', 'POST'])
+@login_required
+def edit_announcement(announcement_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на редагування оголошень.', 'error')
+        return redirect(url_for('announcements'))
+
+    announcement = Announcement.query.get_or_404(announcement_id)
+
+    if request.method == 'POST':
+        title = request.form['title']
+        content = request.form['content']
+
+        if title and content:
+            announcement.title = title
+            announcement.content = content
+            db.session.commit()
+            flash('Оголошення успішно оновлено!', 'success')
+            return redirect(url_for('announcements'))
+        else:
+            flash('Будь ласка, заповніть усі поля для оголошення.', 'error')
+    
+    return render_template('edit_announcement.html', announcement=announcement, current_user=current_user)
+
+# --- НОВЫЙ МАРШРУТ ДЛЯ УДАЛЕНИЯ ОБЪЯВЛЕНИЯ ---
+@app.route('/delete_announcement/<int:announcement_id>', methods=['POST'])
+@login_required
+def delete_announcement(announcement_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на видалення оголошень.', 'error')
+        return redirect(url_for('announcements'))
+
+    announcement = Announcement.query.get_or_404(announcement_id)
+    db.session.delete(announcement)
+    db.session.commit()
+    flash('Оголошення успішно видалено!', 'success')
+    return redirect(url_for('announcements'))
+
 
 # --- Маршруты для опросов ---
 

@@ -56,7 +56,7 @@
         {% elif current_user.is_authenticated %}
             <p class="info-message">Лише адміністратори можуть додавати оголошення.</p>
         {% else %}
-            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійти</a> як адміністратор, щоб додавати оголошення.</p>
+            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб додавати оголошення.</p>
         {% endif %}
 
 
@@ -67,8 +67,7 @@
                     <div class="announcement-card">
                         <h3>{{ ann.title }}</h3>
                         <p class="announcement-meta">Опубліковано: {{ format_datetime_for_display(ann.date) }} від {{ ann.author }}</p>
-                        {# НОВЕ: Відображення тексту з збереженням форматування #}
-                        <div class="announcement-content">{{ ann.content | replace('\n', '<br>') | safe }}</div> {# ЗМІНА ТУТ #}
+                        <div class="announcement-content">{{ ann.content | replace('\n', '<br>') | safe }}</div>
 
                         {% if current_user.is_admin() %}
                             <div class="admin-announcement-actions"> {# НОВИЙ БЛОК ДЛЯ КНОПОК АДМІНА #}
