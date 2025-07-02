@@ -72,7 +72,7 @@ class User(db.Model, UserMixin):
     has_paid_fees = db.Column(db.Boolean, default=False)
     last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
     # НОВІ ПОЛЯ ДЛЯ EMAIL-ПІДТВЕРДЖЕННЯ
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=True)
     email_confirmed = db.Column(db.Boolean, default=False)
     email_confirmation_token = db.Column(db.String(256), nullable=True) 
 
