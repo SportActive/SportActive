@@ -15,14 +15,14 @@ body {
     background-color: #ffffff;
     padding: 40px;
     border-radius: 12px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1); /* Более выраженная тень для основного контейнера */
     max-width: 900px;
     width: 100%;
     margin-top: 20px;
     margin-bottom: 20px;
 }
 
-h1, h2, h3, h4 {
+h1, h2, h3, h4 { /* Общий стиль для заголовков */
     color: #2c3e50;
     text-align: center;
     margin-bottom: 25px;
@@ -30,16 +30,16 @@ h1, h2, h3, h4 {
 }
 
 h1 {
-    font-size: 2.8em;
+    font-size: 2.8em; /* Немного увеличен */
     font-weight: 700;
-    color: #0056b3;
+    color: #0056b3; /* Цвет для главного заголовка */
 }
 
 h2 {
-    font-size: 2.0em;
-    border-bottom: 1px solid #e0e9f0;
+    font-size: 2.0em; /* Немного увеличен */
+    border-bottom: 1px solid #e0e9f0; /* Более мягкая черта */
     padding-bottom: 12px;
-    margin-top: 40px;
+    margin-top: 40px; /* Отступ сверху */
     margin-bottom: 25px;
 }
 
@@ -47,7 +47,7 @@ h3 {
     font-size: 1.6em;
     margin-top: 0;
     margin-bottom: 15px;
-    text-align: left;
+    text-align: left; /* Заголовки карточек по левому краю */
 }
 
 h4 {
@@ -70,8 +70,8 @@ h4 {
 .team-management-section,
 .personal-calendar-section,
 .form-section {
-    margin-bottom: 40px;
-    padding-top: 20px;
+    margin-bottom: 40px; /* Единый отступ между основными блоками */
+    padding-top: 20px; /* Отступ сверху внутри секции */
 }
 
 /* Формы */
