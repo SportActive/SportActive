@@ -52,12 +52,11 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # --- Налаштування Flask-Mail ---
-# Дані беруться зі змінних оточення Render
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1']
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'aktivnosportivnimi@gmail.com') 
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your_app_password') 
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'aktivnosportivnimi@gmail.com')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your_app_password')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'aktivnosportivnimi@gmail.com')
 
 mail = Mail(app) 
@@ -70,11 +69,10 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), default='user')
     has_paid_fees = db.Column(db.Boolean, default=False)
-    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
-    # НОВІ ПОЛЯ ДЛЯ EMAIL-ПІДТВЕРДЖЕННЯ
-    email = db.Column(db.String(120), unique=True, nullable=True)
+    last_fee_payment_date = db.Column(db.String(10), nullable=False, default=None)
+    email = db.Column(db.String(120), unique=True, nullable=True) # ЗМІНА: nullable=True для коректної міграції
     email_confirmed = db.Column(db.Boolean, default=False)
-    email_confirmation_token = db.Column(db.String(256), nullable=True) 
+    email_confirmation_token = db.Column(db.String(256), nullable=True)
 
     def is_admin(self):
         return self.role == 'admin'
@@ -215,7 +213,7 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        email = request.form['email'] 
+        email = request.form['email']
 
         existing_user = User.query.filter_by(username=username).first()
         existing_email = User.query.filter_by(email=email).first()
@@ -233,7 +231,7 @@ def register():
         is_first_user = (User.query.count() == 0)
         new_user_role = 'admin' if is_first_user else 'user' 
         
-        confirmation_token = os.urandom(24).hex() 
+        confirmation_token = os.urandom(24).hex()
         new_user = User(username=username, password_hash=hashed_password, role=new_user_role, 
                         has_paid_fees=False, email=email, email_confirmed=False, 
                         email_confirmation_token=confirmation_token)
@@ -545,7 +543,7 @@ def toggle_participation(event_id):
 def announcements():
     if request.method == 'POST':
         if not current_user.is_admin():
-            flash('У вас немає дозволу на додавання оголошень.', 'error')
+            flash('У вас немає дозволу на додавание оголошень.', 'error')
             return redirect(url_for('announcements'))
 
         title = request.form['title']
