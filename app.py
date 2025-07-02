@@ -140,15 +140,17 @@ class GameLog(db.Model):
     def __repr__(self):
         return f"GameLog('{self.event_name}', '{self.event_date}')"
 
+# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА ОПЛАТ ---
 class FeeLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False)
-    payment_date = db.Column(db.String(10), nullable=False)
+    payment_date = db.Column(db.String(10), nullable=False) # Дата оплаты, которую ввел админ (YYYY-MM-DD)
+    payment_period = db.Column(db.String(50), nullable=True, default=None) # Напр. "Липень 2025" или "2025-07"
     logged_by_admin = db.Column(db.String(80), nullable=False)
     logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
     def __repr__(self):
-        return f"FeeLog('{self.username}', '{self.payment_date}', '{self.logged_by_admin}')"
+        return f"FeeLog('{self.username}', '{self.payment_date}', '{self.payment_period}', '{self.logged_by_admin}')"
 
 
 class Announcement(db.Model):
@@ -354,11 +356,9 @@ def add_event():
         flash('У вас немає дозволу на додавання подій.', 'error')
         return redirect(url_for('index'))
 
-    # Якщо це GET-запит, просто відображаємо форму
     if request.method == 'GET':
-        return render_template('add_event.html', current_user=current_user) # НОВЕ: відображаємо add_event.html
+        return render_template('add_event.html', current_user=current_user)
 
-    # Якщо це POST-запит, обробляємо дані форми
     event_name = request.form['event_name']
     event_datetime_str = request.form['event_datetime'] 
     image_url = request.form.get('image_url') 
@@ -369,7 +369,7 @@ def add_event():
             formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
         except ValueError:
             flash('Неправильний формат дати або часу. Використовуйте РРРР-ММ-ДД HH:MM.', 'error')
-            return render_template('add_event.html', current_user=current_user) # НОВЕ: повертаємо на форму з помилкою
+            return render_template('add_event.html', current_user=current_user)
 
         new_event = Event(name=event_name, date=formatted_datetime, participants_json='[]', teams_json='{}', image_url=image_url if image_url else None)
         db.session.add(new_event)
@@ -378,7 +378,7 @@ def add_event():
         return redirect(url_for('index'))
     else:
         flash('Будь ласка, заповніть усі поля для події.', 'error')
-        return render_template('add_event.html', current_user=current_user) # НОВЕ: повертаємо на форму з помилкою
+        return render_template('add_event.html', current_user=current_user)
 
 # --- МАРШРУТ ДЛЯ РЕДАКТИРОВАНИЯ СОБЫТИЯ ---
 @app.route('/edit_event/<int:event_id>', methods=['GET', 'POST'])
@@ -486,9 +486,11 @@ def toggle_participation(event_id):
 # --- Маршруты для объявлений ---
 
 @app.route('/announcements', methods=['GET', 'POST'])
+@login_required # Только авторизованные пользователи могут видеть объявления
 def announcements():
+    # Если это POST-запрос, это попытка добавить объявление
     if request.method == 'POST':
-        if not current_user.is_authenticated or not current_user.is_admin():
+        if not current_user.is_admin():
             flash('У вас немає дозволу на додавання оголошень.', 'error')
             return redirect(url_for('announcements'))
 
@@ -508,15 +510,17 @@ def announcements():
         else:
             flash('Будь ласка, заповніть усі поля для оголошення.', 'error')
     
+    # Для GET-запроса, или после POST-запроса, отображаем объявления
     ann = Announcement.query.order_by(Announcement.date.desc()).all()
     return render_template('announcements.html', announcements=ann, current_user=current_user)
 
 # --- Маршруты для опросов ---
 
 @app.route('/polls', methods=['GET', 'POST'])
+@login_required # Только авторизованные пользователи могут видеть опросы
 def polls():
     if request.method == 'POST':
-        if not current_user.is_authenticated or not current_user.is_admin():
+        if not current_user.is_admin():
             flash('У вас немає дозволу на создание опитувань.', 'error')
             return redirect(url_for('polls'))
 
@@ -595,8 +599,9 @@ def manage_fees():
     if request.method == 'POST':
         user_id = request.form.get('user_id')
         fee_date_str = request.form.get('fee_date')
+        payment_period = request.form.get('payment_period') # НОВЕ: Отримуємо період розрахунків
 
-        if user_id and fee_date_str:
+        if user_id and fee_date_str and payment_period: # НОВЕ: Перевірка payment_period
             user = User.query.get(int(user_id))
             if user:
                 try:
@@ -608,18 +613,19 @@ def manage_fees():
                     new_fee_log = FeeLog(
                         username=user.username,
                         payment_date=fee_date_str,
+                        payment_period=payment_period, # НОВЕ: Зберігаємо період
                         logged_by_admin=current_user.username
                     )
                     db.session.add(new_fee_log)
                     db.session.commit()
                     # --- Кінець НОВОГО блоку ---
-                    flash(f'Внески для {user.username} від {fee_date_str} успішно записано.', 'success')
+                    flash(f'Внески для {user.username} від {fee_date_str} ({payment_period}) успішно записано.', 'success') # НОВЕ: Повідомлення з періодом
                 except ValueError:
                     flash('Недійсний формат дати. Використовуйте РРРР-ММ-ДД.', 'error')
             else:
-                flash('Будь ласка, оберіть користувача та введіть дату.', 'error')
+                flash('Користувача не знайдено.', 'error')
         else:
-            pass 
+            flash('Будь ласка, заповніть усі поля (користувача, дату та період).', 'error') # НОВЕ: Повідомлення про всі поля
         return redirect(url_for('manage_fees'))
 
     users = User.query.order_by(User.username).all()
@@ -730,8 +736,16 @@ def fee_log():
         flash('У вас немає дозволу на перегляд журналу оплат.', 'error')
         return redirect(url_for('index'))
     
-    fee_logs = FeeLog.query.order_by(FeeLog.logged_at.desc()).all()
-    return render_template('fee_log.html', fee_logs=fee_logs, current_user=current_user)
+    # Отримуємо параметр period_filter з запиту, якщо він є
+    period_filter = request.args.get('period', '').strip()
+
+    # Загружаем логи оплат из БД, сортируем по времени логгирования (сначала новые)
+    query = FeeLog.query
+    if period_filter:
+        query = query.filter(FeeLog.payment_period == period_filter) # Фільтруємо за полем payment_period
+
+    fee_logs = query.order_by(FeeLog.logged_at.desc()).all()
+    return render_template('fee_log.html', fee_logs=fee_logs, current_user=current_user, period_filter=period_filter) # НОВЕ: передаємо period_filter
 
 @app.route('/export_fee_log')
 @login_required
@@ -740,19 +754,28 @@ def export_fee_log():
         flash('У вас немає дозволу на експорт журналу оплат.', 'error')
         return redirect(url_for('index'))
 
+    # Отримуємо параметр period_filter з запиту, якщо він є
+    period_filter = request.args.get('period', '').strip()
+
     si = StringIO()
     cw = csv.writer(si)
 
     headers = [
-        "Користувач", "Дата оплати", "Хто відмітив", "Час логування"
+        "Користувач", "Дата оплати", "Період розрахунків", "Хто відмітив", "Час логування" 
     ]
     cw.writerow(headers)
 
-    fee_logs = FeeLog.query.order_by(FeeLog.logged_at.desc()).all()
+    # Фільтруємо за періодом, якщо він вказаний
+    query = FeeLog.query
+    if period_filter:
+        query = query.filter(FeeLog.payment_period == period_filter) # Фільтруємо за полем payment_period
+
+    fee_logs = query.order_by(FeeLog.logged_at.desc()).all()
     for log in fee_logs:
         row = [
             log.username,
             format_date_only_for_display(log.payment_date), 
+            log.payment_period if log.payment_period else "", 
             log.logged_by_admin,
             format_datetime_for_display(log.logged_at) 
         ]
@@ -766,8 +789,6 @@ def export_fee_log():
 
 
 if __name__ == '__main__':
-    # Цей блок запускається тільки при локальному запуску 'python app.py'
-    # На Render, db.create_all() викликається Alembic'ом через release команду
     with app.app_context(): 
         db.create_all() 
     app.run(debug=True)

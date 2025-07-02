@@ -65,8 +65,8 @@ h4 {
 .announcements-list, 
 .polls-list,
 .user-fees-list,
-.game-log-list,
-.fee-log-list,
+.game-log-list, /* НОВЕ: Додано для журналу подій */
+.fee-log-list, /* НОВЕ: Додано для журналу оплат */
 .team-management-section,
 .personal-calendar-section,
 .form-section {
@@ -112,7 +112,7 @@ form textarea:focus {
 }
 
 /* Общий стиль для кнопок (для единообразия) */
-form button, .small-button, .dropbtn { /* Добавлен .dropbtn */
+form button, .small-button, .dropbtn {
     background-color: #007bff;
     color: white;
     padding: 10px 20px;
@@ -148,7 +148,7 @@ form button:active, .small-button:active, .dropbtn:active {
     border: 1px solid #e0e9f0;
     border-radius: 10px;
     padding: 25px;
-    margin-bottom: 20px; /* Отступ между карточками */
+    margin-bottom: 20px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     position: relative;
@@ -311,16 +311,16 @@ form button:active, .small-button:active, .dropbtn:active {
     margin: 20px 0 30px 0;
     border-bottom: 1px solid #e0e9f0;
     padding-bottom: 15px;
-    display: flex; /* Для Flexbox */
-    justify-content: center; /* Центрируем элементы */
-    align-items: center; /* Выравниваем по центру вертикали */
-    flex-wrap: wrap; /* Разрешаем перенос на новую строку */
-    gap: 15px; /* Отступы между элементами навигации */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
 }
 
 .main-nav a {
     display: inline-block;
-    margin: 0; /* Убираем margin от предыдущего правила */
+    margin: 0;
     padding: 8px 15px;
     color: #007bff;
     text-decoration: none;
@@ -338,7 +338,7 @@ form button:active, .small-button:active, .dropbtn:active {
 .main-nav a.admin-action {
     background-color: #28a745;
     color: white;
-    margin-left: 0; /* Убираем margin-left от предыдущего правила */
+    margin-left: 0;
 }
 
 .main-nav a.admin-action:hover {
@@ -349,15 +349,14 @@ form button:active, .small-button:active, .dropbtn:active {
 .dropdown {
     position: relative;
     display: inline-block;
-    margin: 0 15px; /* Отступ как у других элементов навигации */
+    margin: 0 15px;
 }
 
 .dropbtn {
-    /* Стили как у .small-button, но возможно с другим фоном */
-    background-color: #007bff; /* Пример, можно использовать admin-action цвет */
+    background-color: #007bff;
     color: white;
     padding: 10px 20px;
-    font-size: 1em;
+    font-size: 1.0em; /* Исправлено: был 1em, сделан 1.0em для единообразия */
     border: none;
     cursor: pointer;
     border-radius: 8px;
@@ -380,7 +379,7 @@ form button:active, .small-button:active, .dropbtn:active {
     z-index: 1;
     border-radius: 8px;
     padding: 10px 0;
-    margin-top: 5px; /* Отступ от кнопки */
+    margin-top: 5px;
 }
 
 .dropdown-content a {
@@ -391,7 +390,7 @@ form button:active, .small-button:active, .dropbtn:active {
     text-align: left;
     font-size: 0.95em;
     transition: background-color 0.2s ease, color 0.2s ease;
-    border-radius: 0; /* Убираем закругление у элементов меню */
+    border-radius: 0;
 }
 
 .dropdown-content a:hover {
@@ -401,7 +400,7 @@ form button:active, .small-button:active, .dropbtn:active {
 }
 
 .dropdown:hover .dropdown-content {
-    display: block; /* Показываем меню при наведении на dropdown */
+    display: block;
 }
 
 

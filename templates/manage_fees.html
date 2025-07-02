@@ -28,6 +28,8 @@
             <a href="{{ url_for('polls') }}">Опитування</a>
             {% if current_user.is_authenticated and current_user.is_admin() %}
                 <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
+                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
             {% endif %}
         </nav>
 
@@ -49,6 +51,7 @@
                             <th>Ім'я користувача</th>
                             <th>Статус внесків</th>
                             <th>Дата останньої сплати</th>
+                            <th>Період розрахунків</th> {# НОВА КОЛОНКА #}
                             <th>Дія</th>
                         </tr>
                     </thead>
@@ -64,13 +67,18 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {# Відображаємо дату, використовуючи функцію форматування #}
-                                    {{ format_date_only_for_display(user.last_fee_payment_date) }} {# ЗМІНА #}
+                                    {{ format_date_only_for_display(user.last_fee_payment_date) }}
+                                </td>
+                                <td>
+                                    {# Відображаємо період розрахунків #}
+                                    {{ user.payment_period if user.payment_period else 'Н/Д' }} {# ЗМІНА #}
                                 </td>
                                 <td>
                                     <form action="{{ url_for('manage_fees') }}" method="POST" class="inline-form">
                                         <input type="hidden" name="user_id" value="{{ user.id }}">
                                         <input type="date" name="fee_date" value="{{ user.last_fee_payment_date if user.last_fee_payment_date else '' }}">
+                                        {# НОВЕ ПОЛЕ: для періоду розрахунків (тип month для РРРР-ММ) #}
+                                        <input type="month" name="payment_period" placeholder="Період (РРРР-ММ)" value="{{ request.form.get('payment_period', user.payment_period if user.payment_period else '') }}"> {# ЗМІНА #}
                                         <button type="submit" class="small-button">Оновити</button>
                                     </form>
                                 </td>
