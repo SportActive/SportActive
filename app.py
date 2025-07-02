@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, make_response # Додано make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy 
 import os
@@ -9,7 +9,6 @@ import csv
 from io import StringIO 
 
 app = Flask(__name__)
-# ВАЖНО: Секретный ключ теперь может быть взят из переменной окружения
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this') 
 
 # --- Настройка SQLAlchemy ---
@@ -26,28 +25,23 @@ def utility_processor():
         if not dt_str:
             return "Н/Д"
         try:
-            # Сначала парсим из формата БД (YYYY-MM-DD HH:MM:SS)
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-            # Затем форматируем в DD.MM.YYYY HH:MM
             return dt_obj.strftime('%d.%m.%Y %H:%M')
         except ValueError:
-            # Если формат не соответствует, пробуем только дату (для last_fee_payment_date)
             try:
                 dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
                 return dt_obj.strftime('%d.%m.%Y')
             except ValueError:
-                return dt_str # Возвращаем как есть, если не удалось распарсить
+                return dt_str
     
     def format_date_only_for_display(date_str):
         if not date_str:
             return "Н/Д"
         try:
-            # Парсим из формата БД (YYYY-MM-DD)
             dt_obj = datetime.strptime(date_str, '%Y-%m-%d')
-            # Форматируем в DD.MM.YYYY
             return dt_obj.strftime('%d.%m.%Y')
         except ValueError:
-            return date_str # Возвращаем как есть
+            return date_str
             
     return dict(enumerate=enumerate, 
                 format_datetime_for_display=format_datetime_for_display,
@@ -59,6 +53,10 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # --- Модели базы данных ---
+# ВАЖНО: Всі моделі повинні бути оголошені до db = SQLAlchemy(app) або бути імпортовані
+# у env.py, щоб Alembic їх побачив. У нашому випадку вони всі в app.py, тому
+# просто переконайтеся, що всі класи db.Model визначені тут.
+
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -103,7 +101,6 @@ class Event(db.Model):
     def __repr__(self):
         return f"Event('{self.name}', '{self.date}')"
 
-# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА СОБЫТИЙ ---
 class GameLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event_name = db.Column(db.String(100), nullable=False)
@@ -140,6 +137,17 @@ class GameLog(db.Model):
 
     def __repr__(self):
         return f"GameLog('{self.event_name}', '{self.event_date}')"
+
+# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА ОПЛАТ ---
+class FeeLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False)
+    payment_date = db.Column(db.String(10), nullable=False) # Дата оплаты, которую ввел админ (ДД-ММ-РРРР)
+    logged_by_admin = db.Column(db.String(80), nullable=False) # Кто из админов отметил оплату
+    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S')) # Время, когда запись попала в лог
+
+    def __repr__(self):
+        return f"FeeLog('{self.username}', '{self.payment_date}', '{self.logged_by_admin}')"
 
 
 class Announcement(db.Model):
@@ -697,9 +705,9 @@ def export_game_log():
             log.event_name,
             format_datetime_for_display(log.event_date), # Форматируем дату для CSV
             format_datetime_for_display(log.logged_at), # Форматируем дату лога для CSV
-            ", ".join(log.active_participants), # Список в строку
-            ", ".join(log.cancelled_participants), # Список в строку
-            json.dumps(log.teams, ensure_ascii=False), # Словарь команд в JSON-строку
+            ", ".join(log.active_participants), 
+            ", ".join(log.cancelled_participants), 
+            json.dumps(log.teams, ensure_ascii=False), 
             log.image_url if log.image_url else ""
         ]
         cw.writerow(row)
