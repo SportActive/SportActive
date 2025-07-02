@@ -89,7 +89,8 @@ form input[type="date"],
 form input[type="password"],
 form input[type="url"],
 form input[type="datetime-local"],
-form textarea {
+form textarea,
+form input[type="month"] { /* НОВОЕ: Добавлен input[type="month"] */
     padding: 12px 15px;
     border: 1px solid #c0d3eb;
     border-radius: 8px;
@@ -105,14 +106,15 @@ form input[type="date"]:focus,
 form input[type="password"]:focus,
 form input[type="url"]:focus,
 form input[type="datetime-local"]:focus,
-form textarea:focus {
+form textarea:focus,
+form input[type="month"]:focus { /* НОВОЕ: Добавлен input[type="month"] */
     border-color: #007bff;
     box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
     outline: none;
 }
 
 /* Общий стиль для кнопок (для единообразия) */
-form button, .small-button, .dropbtn { /* Добавлен .dropbtn */
+form button, .small-button, .dropbtn {
     background-color: #007bff;
     color: white;
     padding: 10px 20px;
@@ -148,7 +150,7 @@ form button:active, .small-button:active, .dropbtn:active {
     border: 1px solid #e0e9f0;
     border-radius: 10px;
     padding: 25px;
-    margin-bottom: 20px; /* Отступ между карточками */
+    margin-bottom: 20px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     position: relative;
@@ -283,7 +285,7 @@ form button:active, .small-button:active, .dropbtn:active {
     text-align: center;
     padding: 20px;
     background-color: #e6f7ff;
-    border: 1:px solid #91d5ff; /* ОШИБКА ЗДЕСЬ: "1:px" вместо "1px" */
+    border: 1px solid #91d5ff;
     color: #084c7c;
     border-radius: 8px;
     margin: 30px auto;
@@ -348,8 +350,8 @@ form button:active, .small-button:active, .dropbtn:active {
 /* --- Стилі для Dropdown меню --- */
 .dropdown {
     position: relative;
-    display: inline-block;
-    margin: 0 15px;
+    display: inline-block; /* Позволяет ему быть в ряду с другими a */
+    margin: 0 15px; /* Отступ как у других элементов навигации */
 }
 
 .dropbtn {
@@ -371,22 +373,24 @@ form button:active, .small-button:active, .dropbtn:active {
 }
 
 .dropdown-content {
-    display: none;
+    display: none; /* Скрыто по умолчанию */
     position: absolute;
     background-color: #f9f9f9;
     min-width: 180px;
     box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-    z-index: 1;
+    z-index: 1; /* Поверх других элементов */
     border-radius: 8px;
     padding: 10px 0;
-    margin-top: 5px;
+    margin-top: 5px; /* Отступ от кнопки */
+    left: 50%; /* Центрируем по горизонтали */
+    transform: translateX(-50%); /* Точная центровка */
 }
 
 .dropdown-content a {
     color: black;
     padding: 12px 16px;
     text-decoration: none;
-    display: block;
+    display: block; /* Каждый пункт - блок */
     text-align: left;
     font-size: 0.95em;
     transition: background-color 0.2s ease, color 0.2s ease;
@@ -400,7 +404,7 @@ form button:active, .small-button:active, .dropbtn:active {
 }
 
 .dropdown:hover .dropdown-content {
-    display: block;
+    display: block; /* Показываем меню при наведении на dropdown */
 }
 
 
@@ -981,30 +985,50 @@ h4 {
 .fee-log-list tr:hover {
     background-color: #f6f9fc;
 }
-/* Стилі для форми фільтрації в журналі оплат */
-.fee-filter-form {
-    justify-content: flex-start; /* Выравнивание элементов по левому краю */
-    margin-bottom: 15px; /* Отступ от таблицы */
+/* Стилі для форми фільтрації в журналах */
+.fee-filter-form { /* Применяется и к game_log */
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Увеличил отступ */
+    margin-bottom: 15px;
+    justify-content: flex-start;
+    flex-wrap: wrap; /* Для адаптивности */
 }
 
 .fee-filter-form label {
     font-weight: 600;
     color: #4a698a;
-    margin-right: 10px;
-    white-space: nowrap; /* Не переносить текст */
+    white-space: nowrap;
 }
 
-.fee-filter-form input[type="month"] {
+.fee-filter-form input[type="month"],
+.fee-filter-form input[type="text"] { /* Добавлен text для game_log */
     max-width: 150px;
     padding: 8px 10px;
     border: 1px solid #c0d3eb;
     border-radius: 8px;
     font-size: 1em;
     box-sizing: border-box;
-    margin-right: 10px;
+    flex-grow: 0; /* Не растягивать */
+    min-width: 100px; /* Минимальная ширина */
 }
 
 .fee-filter-form button {
     padding: 8px 15px;
     font-size: 0.95em;
+}
+
+/* Адаптивность для форм фильтрации */
+@media (max-width: 480px) {
+    .fee-filter-form {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .fee-filter-form input[type="month"],
+    .fee-filter-form input[type="text"],
+    .fee-filter-form button {
+        width: 100%;
+        max-width: unset;
+        margin-right: 0;
+    }
 }

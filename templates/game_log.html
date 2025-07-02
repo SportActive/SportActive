@@ -28,7 +28,8 @@
             <a href="{{ url_for('polls') }}">Опитування</a>
             {% if current_user.is_authenticated and current_user.is_admin() %}
                 <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
-                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a> {# НОВЕ ПОСИЛАННЯ #}
+                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
+                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
             {% endif %}
         </nav>
 
@@ -45,7 +46,14 @@
         <div class="game-log-list">
             {% if current_user.is_admin() %}
                 <div class="log-actions">
-                    <a href="{{ url_for('export_game_log') }}" class="small-button download-button">Завантажити журнал подій (CSV)</a>
+                    {# Форма фільтрації за періодом #}
+                    <form action="{{ url_for('game_log') }}" method="GET" class="inline-form fee-filter-form"> {# Використовуємо той же стиль форми #}
+                        <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
+                        <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
+                        <button type="submit" class="small-button">Фільтрувати</button>
+                    </form>
+                    {# Кнопка експорту (тепер може включати фільтр) #}
+                    <a href="{{ url_for('export_game_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал подій (CSV)</a>
                 </div>
                 
                 {% if game_logs %}
@@ -65,8 +73,8 @@
                             {% for log in game_logs %}
                                 <tr>
                                     <td>{{ log.event_name }}</td>
-                                    <td>{{ format_datetime_for_display(log.event_date) }}</td> {# Застосовано форматування #}
-                                    <td>{{ format_datetime_for_display(log.logged_at) }}</td> {# Застосовано форматування #}
+                                    <td>{{ format_datetime_for_display(log.event_date) }}</td>
+                                    <td>{{ format_datetime_for_display(log.logged_at) }}</td>
                                     <td>
                                         {% if log.active_participants %}
                                             {{ log.active_participants | join(', ') }}
@@ -104,7 +112,7 @@
                         </tbody>
                     </table>
                 {% else %}
-                    <p>Журнал подій порожній.</p>
+                    <p>Журнал подій порожній або немає записів за вибраний період.</p>
                 {% endif %}
             {% else %}
                 <p class="info-message">У вас немає дозволу на перегляд журналу подій.</p>
