@@ -140,12 +140,11 @@ class GameLog(db.Model):
     def __repr__(self):
         return f"GameLog('{self.event_name}', '{self.event_date}')"
 
-# --- НОВАЯ МОДЕЛЬ ДЛЯ ЖУРНАЛА ОПЛАТ ---
 class FeeLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False)
-    payment_date = db.Column(db.String(10), nullable=False) # Дата оплаты, которую ввел админ (YYYY-MM-DD)
-    payment_period = db.Column(db.String(50), nullable=True, default=None) # Напр. "Липень 2025" или "2025-07"
+    payment_date = db.Column(db.String(10), nullable=False)
+    payment_period = db.Column(db.String(50), nullable=True, default=None)
     logged_by_admin = db.Column(db.String(80), nullable=False)
     logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
@@ -599,9 +598,9 @@ def manage_fees():
     if request.method == 'POST':
         user_id = request.form.get('user_id')
         fee_date_str = request.form.get('fee_date')
-        payment_period = request.form.get('payment_period') # НОВЕ: Отримуємо період розрахунків
+        payment_period = request.form.get('payment_period') 
 
-        if user_id and fee_date_str and payment_period: # НОВЕ: Перевірка payment_period
+        if user_id and fee_date_str and payment_period: 
             user = User.query.get(int(user_id))
             if user:
                 try:
@@ -609,23 +608,21 @@ def manage_fees():
                     user.has_paid_fees = True
                     user.last_fee_payment_date = fee_date_str
                     db.session.commit()
-                    # --- НОВЕ: Логування оплати у FeeLog ---
                     new_fee_log = FeeLog(
                         username=user.username,
                         payment_date=fee_date_str,
-                        payment_period=payment_period, # НОВЕ: Зберігаємо період
+                        payment_period=payment_period, 
                         logged_by_admin=current_user.username
                     )
                     db.session.add(new_fee_log)
                     db.session.commit()
-                    # --- Кінець НОВОГО блоку ---
-                    flash(f'Внески для {user.username} від {fee_date_str} ({payment_period}) успішно записано.', 'success') # НОВЕ: Повідомлення з періодом
+                    flash(f'Внески для {user.username} від {fee_date_str} ({payment_period}) успішно записано.', 'success')
                 except ValueError:
                     flash('Недійсний формат дати. Використовуйте РРРР-ММ-ДД.', 'error')
             else:
                 flash('Користувача не знайдено.', 'error')
         else:
-            flash('Будь ласка, заповніть усі поля (користувача, дату та період).', 'error') # НОВЕ: Повідомлення про всі поля
+            flash('Будь ласка, заповніть усі поля (користувача, дату та період).', 'error')
         return redirect(url_for('manage_fees'))
 
     users = User.query.order_by(User.username).all()
@@ -742,10 +739,10 @@ def fee_log():
     # Загружаем логи оплат из БД, сортируем по времени логгирования (сначала новые)
     query = FeeLog.query
     if period_filter:
-        query = query.filter(FeeLog.payment_period == period_filter) # Фільтруємо за полем payment_period
+        query = query.filter(FeeLog.payment_period == period_filter) 
 
     fee_logs = query.order_by(FeeLog.logged_at.desc()).all()
-    return render_template('fee_log.html', fee_logs=fee_logs, current_user=current_user, period_filter=period_filter) # НОВЕ: передаємо period_filter
+    return render_template('fee_log.html', fee_logs=fee_logs, current_user=current_user, period_filter=period_filter)
 
 @app.route('/export_fee_log')
 @login_required
@@ -768,7 +765,7 @@ def export_fee_log():
     # Фільтруємо за періодом, якщо він вказаний
     query = FeeLog.query
     if period_filter:
-        query = query.filter(FeeLog.payment_period == period_filter) # Фільтруємо за полем payment_period
+        query = query.filter(FeeLog.payment_period == period_filter) 
 
     fee_logs = query.order_by(FeeLog.logged_at.desc()).all()
     for log in fee_logs:

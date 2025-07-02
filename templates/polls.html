@@ -28,6 +28,8 @@
             <a href="{{ url_for('polls') }}">Опитування</a>
             {% if current_user.is_authenticated and current_user.is_admin() %}
                 <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
+                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
+                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
             {% endif %}
         </nav>
 
@@ -68,7 +70,7 @@
                 {% for poll in polls %}
                     <div class="poll-card">
                         <h3>{{ poll.question }}</h3>
-                        <p class="poll-meta">Створено: {{ format_datetime_for_display(poll.date) }} від {{ poll.author }}</p> {# ЗМІНА #}
+                        <p class="poll-meta">Створено: {{ format_datetime_for_display(poll.date) }} від {{ poll.author }}</p>
                         
                         {% if current_user.is_authenticated and current_user.username not in poll.voted_users %}
                             <form action="{{ url_for('vote_poll', poll_id=poll.id) }}" method="POST">

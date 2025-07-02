@@ -78,7 +78,7 @@
                                         <input type="hidden" name="user_id" value="{{ user.id }}">
                                         <input type="date" name="fee_date" value="{{ user.last_fee_payment_date if user.last_fee_payment_date else '' }}">
                                         {# НОВЕ ПОЛЕ: для періоду розрахунків (тип month для РРРР-ММ) #}
-                                        <input type="month" name="payment_period" placeholder="Період (РРРР-ММ)" value="{{ request.form.get('payment_period', user.payment_period if user.payment_period else '') }}"> {# ЗМІНА #}
+                                        <input type="text" name="payment_period" placeholder="Період (напр. Лип. 2025)" value="{{ request.form.get('payment_period', user.payment_period if user.payment_period else '') }}"> {# ЗМІНА #}
                                         <button type="submit" class="small-button">Оновити</button>
                                     </form>
                                 </td>
