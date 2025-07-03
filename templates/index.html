@@ -26,10 +26,18 @@
             <a href="{{ url_for('index') }}">Події</a>
             <a href="{{ url_for('announcements') }}">Оголошення</a>
             <a href="{{ url_for('polls') }}">Опитування</a>
+            
+            {# НОВЕ: Випадаюче меню для адміністраторів #}
             {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="{{ url_for('manage_fees') }}" class="admin-action">Керувати внесками</a>
-                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
-                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
+                <div class="dropdown">
+                    <button class="dropbtn admin-action">Адміністрування ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('add_event') }}">Додати подію</a>
+                        <a href="{{ url_for('manage_fees') }}">Керувати внесками</a>
+                        <a href="{{ url_for('game_log') }}">Журнал подій</a>
+                        <a href="{{ url_for('fee_log') }}">Журнал оплат</a>
+                    </div>
+                </div>
             {% endif %}
         </nav>
 
@@ -92,8 +100,16 @@
                                     {% endif %}
                                     
                                     {# Відображаємо назву команди, якщо учасник є в ній #}
-                                    {% if p_entry.assigned_team_name %}
-                                        <span class="team-name-badge">{{ p_entry.assigned_team_name }}</span>
+                                    {% set assigned_team_name = '' %}
+                                    {% for team_name, members in event.teams.items() %}
+                                        {% if p_entry.username in members %}
+                                            {% set assigned_team_name = team_name %}
+                                            {% break %} 
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% if assigned_team_name %}
+                                        <span class="team-name-badge">{{ assigned_team_name }}</span>
                                     {% endif %}
 
                                     <span class="participation-info">
