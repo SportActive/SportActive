@@ -29,7 +29,7 @@ h1, h2, h3, h4 { /* Общий стиль для заголовков */
     font-weight: 600;
 }
 
-/* ЗМІНИ ТУТ: Стилі для головного заголовка та його іконки */
+/* Стилі для головного заголовка та його іконки */
 .main-title {
     font-size: 2.8em;
     font-weight: 700;
@@ -211,10 +211,10 @@ form button:active, .small-button:active, .dropbtn:active {
     font-weight: 500;
     color: #333;
     display: flex;
-    align-items: center;
-    justify-content: space-between; /* Розтягуємо елементи по краях */
-    flex-wrap: wrap; /* Дозволяє елементам переноситися на новий рядок, якщо не вистачає місця */
-    gap: 10px; /* Додаємо невеликий проміжок між елементами */
+    align-items: center; /* Вирівнюємо елементи по вертикалі */
+    justify-content: space-between; /* Розтягуємо елементи по краях, розподіляючи простір */
+    flex-wrap: wrap; 
+    /* gap: 10px; */
 }
 
 .event-card ul li:last-child {
@@ -838,13 +838,11 @@ h4 {
     text-align: left;
 }
 
-/* Новий стиль для контейнера імені та бейджів */
-.participant-details {
-    display: flex; /* Робимо це теж Flex-контейнером */
-    align-items: center; /* Вирівнюємо по вертикалі */
-    gap: 8px; /* Проміжок між іменем, бейджем оплати та бейджем команди */
-    flex-grow: 1; /* Дозволяє йому зайняти доступний простір */
-    flex-wrap: wrap; /* Дозволяє обертатися, якщо місця замало */
+/* Новий стиль для обгортки імені учасника */
+.participant-name-wrapper {
+    flex-shrink: 0; /* Не дозволяємо зменшуватися */
+    margin-right: 10px; /* Невеликий відступ від наступного елемента */
+    white-space: nowrap; /* Запобігає переносу імені */
 }
 
 .participation-info {
@@ -852,6 +850,7 @@ h4 {
     color: #6c757d;
     white-space: nowrap; /* Запобігає переносу дати */
     flex-shrink: 0; /* Не дозволяє зменшуватися */
+    margin-left: 10px; /* Невеликий відступ від бейджа команди */
 }
 
 .cancelled-badge {
@@ -906,7 +905,7 @@ h4 {
 .personal-calendar-section ul li span {
     font-size: 0.9em;
     color: #666;
-    /* margin-left:  <-- Обірвано в оригіналі, тому тут не додаю нічого */
+    /* margin-left: */
 }
 
 /* Стилі для назви команди */
@@ -917,6 +916,9 @@ h4 {
     border-radius: 4px; /* Заокруглені кути */
     font-weight: 600; /* Жирний шрифт */
     white-space: nowrap; /* Запобігає переносу тексту на новий рядок */
-    display: inline-block; /* Дозволяє застосовувати відступи та розміри, зберігаючи рядок */
+    display: inline-block; /* Дозволяє застосовувати відступи та розміри */
     font-size: 0.9em; /* Трохи менший розмір шрифту */
+    margin: 0 auto; /* ЦЕНТРУЄ ЕЛЕМЕНТ В СЕРЕДИНІ ДОСТУПНОГО ПРОСТОРУ */
+    flex-grow: 1; /* Дозволяє йому займати доступний простір */
+    text-align: center; /* Центрує текст всередині бейджа */
 }

@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Активно-спортивні ми</title> {# ЗМІНА ТУТ: Нова назва сторінки #}
+    <title>Активно-спортивні ми</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
 </head>
 <body>
     <div class="container">
-        <h1 class="main-title"> {# ЗМІНА ТУТ: Додано клас main-title #}
-            <img src="{{ url_for('static', filename='favicon.png') }}" alt="Логотип" class="main-title-icon"> {# НОВЕ: Картинка фавікону #}
-            Активно-спортивні ми {# ЗМІНА ТУТ: Нова назва #}
+        <h1 class="main-title">
+            <img src="{{ url_for('static', filename='favicon.png') }}" alt="Логотип" class="main-title-icon">
+            Активно-спопортивні ми
         </h1>
 
         <div class="auth-links">
@@ -97,16 +97,17 @@
                         <ul>
                             {% for p_entry in event.processed_participants %}
                                 <li>
-                                    <div class="participant-details"> 
+                                    <span class="participant-name-wrapper"> {# Контейнер для імені та бейджа оплати #}
                                         {{ p_entry.username }} 
                                         {% if users_fee_status[p_entry.username] is defined and users_fee_status[p_entry.username] %}
                                             <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                         {% endif %}
-                                        
-                                        {% if p_entry.assigned_team_name %}
-                                            <span class="team-name-badge">{{ p_entry.assigned_team_name }} 😉</span>
-                                        {% endif %}
-                                    </div>
+                                    </span>
+                                    
+                                    {# Назва команди зі смайликом #}
+                                    {% if p_entry.assigned_team_name %}
+                                        <span class="team-name-badge">{{ p_entry.assigned_team_name }} 😉</span>
+                                    {% endif %}
 
                                     <span class="participation-info">
                                         (Запис: {{ format_datetime_for_display(p_entry.timestamp) }}
