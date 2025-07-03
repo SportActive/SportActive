@@ -26,7 +26,7 @@ def utility_processor():
         try:
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
             # НОВЕ: Явно отримуємо назву дня тижня
-            days_of_week_short = ["Пн", "Вт", "Срд", "Чтв", "Птн", "Сбт", "Нд"]
+            days_of_week_short = ["Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота", "Неділя"]
             day_name = days_of_week_short[dt_obj.weekday()]
             
             return dt_obj.strftime(f'{day_name}, %d.%m.%Y %H:%M') # Використовуємо явне ім'я дня
