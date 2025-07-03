@@ -92,6 +92,7 @@
                         
                         <h4>Список учасників:</h4>
                         <ul>
+                            {# ЗМІНА ТУТ: Виводимо назву команди напряму з p_entry.assigned_team_name #}
                             {% for p_entry in event.processed_participants %}
                                 <li>
                                     {{ p_entry.username }} 
@@ -99,17 +100,8 @@
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
                                     
-                                    {# Відображаємо назву команди, якщо учасник є в ній #}
-                                    {% set assigned_team_name = '' %}
-                                    {% for team_name, members in event.teams.items() %}
-                                        {% if p_entry.username in members %}
-                                            {% set assigned_team_name = team_name %}
-                                            {# % break % #} 
-                                        {% endif %}
-                                    {% endfor %}
-
-                                    {% if assigned_team_name %}
-                                        <span class="team-name-badge">{{ assigned_team_name }}</span>
+                                    {% if p_entry.assigned_team_name %} {# Використовуємо assigned_team_name, що вже підготовлено в app.py #}
+                                        <span class="team-name-badge">{{ p_entry.assigned_team_name }}</span>
                                     {% endif %}
 
                                     <span class="participation-info">
