@@ -373,12 +373,12 @@ form button:active, .small-button:active, .dropbtn:active {
 }
 
 .dropdown-content {
-    display: none; /* Скрыто по умолчанию */
+    display: none;
     position: absolute;
     background-color: #f9f9f9;
     min-width: 180px;
     box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-    z-index: 1; /* Поверх других элементов */
+    z-index: 1;
     border-radius: 8px;
     padding: 10px 0;
     margin-top: 5px;
@@ -874,4 +874,184 @@ h4 {
 .personal-calendar-section ul li span {
     font-size: 0.9em;
     color: #666;
-    margin-left:
+    margin-left: 10px;
+}
+
+/* Отступы для элементов формы в manage_teams */
+.team-block input[type="text"],
+.team-block textarea {
+    width: calc(100% - 30px);
+}
+
+/* Стиль для відображення назви команди біля імені учасника */
+.team-name-badge {
+    background-color: #007bff;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin-left: 8px;
+    display: inline-block;
+}
+
+/* Стилі для журналу подій (Game Log) */
+.game-log-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.game-log-list th,
+.game-log-list td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.game-log-list th {
+    background-color: #f0f4f7;
+    color: #4a698a;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85em;
+}
+
+.game-log-list tr:last-child td {
+    border-bottom: none;
+}
+
+.game-log-list tr:hover {
+    background-color: #f6f9fc;
+}
+
+.game-log-list td ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.game-log-list td ul li {
+    padding: 2px 0;
+    border-left: none;
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.log-event-image {
+    max-width: 50px;
+    max-height: 50px;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.log-actions {
+    text-align: right;
+    margin-bottom: 20px;
+}
+
+.log-actions .download-button {
+    background-color: #28a745;
+}
+
+.log-actions .download-button:hover {
+    background-color: #218838;
+}
+
+/* Стилі для журналу оплат (Fee Log) */
+.fee-log-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.fee-log-list th,
+.fee-log-list td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.fee-log-list th {
+    background-color: #f0f4f7;
+    color: #4a698a;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85em;
+}
+
+.fee-log-list tr:last-child td {
+    border-bottom: none;
+}
+
+.fee-log-list tr:hover {
+    background-color: #f6f9fc;
+}
+/* Стилі для форми фільтрації в журналах */
+.fee-filter-form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+
+.fee-filter-form label {
+    font-weight: 600;
+    color: #4a698a;
+    white-space: nowrap;
+}
+
+.fee-filter-form input[type="month"],
+.fee-filter-form input[type="text"] {
+    max-width: 150px;
+    padding: 8px 10px;
+    border: 1px solid #c0d3eb;
+    border-radius: 8px;
+    font-size: 1em;
+    box-sizing: border-box;
+    flex-grow: 0;
+    min-width: 100px;
+}
+
+.fee-filter-form button {
+    padding: 8px 15px;
+    font-size: 0.95em;
+}
+
+/* Адаптивность для форм фильтрации */
+@media (max-width: 480px) {
+    .fee-filter-form {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .fee-filter-form input[type="month"],
+    .fee-filter-form input[type="text"],
+    .fee-filter-form button {
+        width: 100%;
+        max-width: unset;
+        margin-right: 0;
+    }
+}
+
+/* Стилі для назви команди */
+.team-name-badge {
+    background-color: #d1ecf1; /* Світло-блакитний фон */
+    color: #0c5460; /* Темно-синій колір тексту */
+    padding: 3px 8px; /* Внутрішні відступи */
+    border-radius: 4px; /* Заокруглені кути */
+    font-weight: 600; /* Жирний шрифт */
+    margin-left: 8px; /* Відступ від попереднього елемента */
+    white-space: nowrap; /* Запобігає переносу тексту на новий рядок */
+    display: inline-block; /* Дозволяє застосовувати відступи та розміри, зберігаючи рядок */
+    font-size: 0.9em; /* Трохи менший розмір шрифту */
+}

@@ -25,11 +25,11 @@ def utility_processor():
             return "Н/Д"
         try:
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-            # НОВЕ: Явно отримуємо назву дня тижня
-            days_of_week_short = ["Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота", "Неділя"]
-            day_name = days_of_week_short[dt_obj.weekday()]
+            # ЗМІНА ТУТ: Явно отримуємо назву дня тижня (повне найменування)
+            days_of_week_full = ["Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота", "Неділя"]
+            day_name = days_of_week_full[dt_obj.weekday()]
             
-            return dt_obj.strftime(f'{day_name}, %d.%m.%Y %H:%M') # Використовуємо явне ім'я дня
+            return dt_obj.strftime(f'{day_name}, %d.%m.%Y %H:%M') 
         except ValueError:
             try:
                 dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
@@ -217,7 +217,7 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        email = request.form['email']
+        email = request.form['email'] 
 
         existing_user = User.query.filter_by(username=username).first()
         existing_email = User.query.filter_by(email=email).first()
@@ -235,7 +235,7 @@ def register():
         is_first_user = (User.query.count() == 0)
         new_user_role = 'admin' if is_first_user else 'user' 
         
-        confirmation_token = os.urandom(24).hex()
+        confirmation_token = os.urandom(24).hex() 
         new_user = User(username=username, password_hash=hashed_password, role=new_user_role, 
                         has_paid_fees=False, email=email, email_confirmed=False, 
                         email_confirmation_token=confirmation_token)
@@ -547,7 +547,7 @@ def toggle_participation(event_id):
 def announcements():
     if request.method == 'POST':
         if not current_user.is_admin():
-            flash('У вас немає дозволу на додавание оголошень.', 'error')
+            flash('У вас немає дозволу на додавание оголошений.', 'error')
             return redirect(url_for('announcements'))
 
         title = request.form['title']
