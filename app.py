@@ -25,7 +25,9 @@ def utility_processor():
             return "Н/Д"
         try:
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-            return dt_obj.strftime('%d.%m.%Y %H:%M')
+            # ЗМІНА ТУТ: Додано %a для скороченого дня тижня (напр. Срд, Чтв)
+            # Або %A для повного (напр. Середа, Четвер)
+            return dt_obj.strftime('%,A %d.%m.%Y %H:%M') 
         except ValueError:
             try:
                 dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
@@ -70,7 +72,7 @@ class User(db.Model, UserMixin):
     role = db.Column(db.String(20), default='user')
     has_paid_fees = db.Column(db.Boolean, default=False)
     last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
-    email = db.Column(db.String(120), unique=True, nullable=False) # ЗМІНА: nullable=True для коректної міграції
+    email = db.Column(db.String(120), unique=True, nullable=True) # ЗМІНА: nullable=True для коректної міграції
     email_confirmed = db.Column(db.Boolean, default=False)
     email_confirmation_token = db.Column(db.String(256), nullable=True)
 
@@ -507,7 +509,7 @@ def toggle_participation(event_id):
             break
 
     if found_participant_entry:
-        registration_time_str = found_participant_entry["timestamp"]
+        registration_time_str = found_time_str = p_entry["timestamp"] # Error in app.py from last turn
         registration_time = datetime.strptime(registration_time_str, '%Y-%m-%d %H:%M:%S')
         
         if datetime.now() - registration_time > timedelta(hours=1):
