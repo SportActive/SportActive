@@ -100,9 +100,9 @@
                                         <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                     {% endif %}
                                     
-                                    {# Відображаємо назву команди напряму з p_entry.assigned_team_name #}
+                                    {# Відображаємо назву команди напряму з p_entry.assigned_team_name + смайлик #}
                                     {% if p_entry.assigned_team_name %}
-                                        <span class="team-name-badge">{{ p_entry.assigned_team_name }}</span>
+                                        <span class="team-name-badge">{{ p_entry.assigned_team_name }}</span> 😉
                                     {% endif %}
 
                                     <span class="participation-info">
