@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Клуб спортивних ігор</title>
+    <title>Активно-спортивні ми</title> {# ЗМІНА ТУТ: Нова назва сторінки #}
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
 </head>
 <body>
     <div class="container">
-        <h1>Клуб спортивних ігор</h1>
+        <h1 class="main-title"> {# ЗМІНА ТУТ: Додано клас main-title #}
+            <img src="{{ url_for('static', filename='favicon.png') }}" alt="Логотип" class="main-title-icon"> {# НОВЕ: Картинка фавікону #}
+            Активно-спортивні ми {# ЗМІНА ТУТ: Нова назва #}
+        </h1>
 
         <div class="auth-links">
             {% if current_user.is_authenticated %}
@@ -94,13 +97,12 @@
                         <ul>
                             {% for p_entry in event.processed_participants %}
                                 <li>
-                                    <div class="participant-details"> {# Новий контейнер для імені та бейджів #}
+                                    <div class="participant-details"> 
                                         {{ p_entry.username }} 
                                         {% if users_fee_status[p_entry.username] is defined and users_fee_status[p_entry.username] %}
                                             <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                         {% endif %}
                                         
-                                        {# Смайлик тепер всередині team-name-badge #}
                                         {% if p_entry.assigned_team_name %}
                                             <span class="team-name-badge">{{ p_entry.assigned_team_name }} 😉</span>
                                         {% endif %}

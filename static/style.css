@@ -29,11 +29,25 @@ h1, h2, h3, h4 { /* Общий стиль для заголовков */
     font-weight: 600;
 }
 
-h1 {
-    font-size: 2.8em; /* Немного увеличен */
+/* ЗМІНИ ТУТ: Стилі для головного заголовка та його іконки */
+.main-title {
+    font-size: 2.8em;
     font-weight: 700;
-    color: #0056b3; /* Цвет для главного заголовка */
+    color: #0056b3;
+    text-align: center;
+    display: flex; /* Робимо H1 Flex-контейнером */
+    align-items: center; /* Вирівнюємо елементи по центру по вертикалі */
+    justify-content: center; /* Вирівнюємо вміст по центру по горизонталі */
+    gap: 15px; /* Проміжок між іконкою та текстом */
+    margin-bottom: 25px;
 }
+
+.main-title-icon {
+    height: 40px; /* Розмір іконки */
+    width: auto;
+    vertical-align: middle; /* Вирівнюємо по центру тексту */
+}
+
 
 h2 {
     font-size: 2.0em; /* Немного увеличен */
@@ -753,6 +767,12 @@ textarea.drag-over {
 
     h1 {
         font-size: 2em;
+        flex-direction: column; /* Змінюємо напрямок для мобільних пристроїв */
+        gap: 10px; /* Менший проміжок */
+    }
+
+    .main-title-icon {
+        height: 30px; /* Менший розмір для мобільних пристроїв */
     }
 
     h2 {
