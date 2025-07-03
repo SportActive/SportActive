@@ -25,9 +25,11 @@ def utility_processor():
             return "Н/Д"
         try:
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-            # ЗМІНА ТУТ: Додано %a для скороченого дня тижня (напр. Срд, Чтв)
-            # Або %A для повного (напр. Середа, Четвер)
-            return dt_obj.strftime('%,A %d.%m.%Y %H:%M') 
+            # НОВЕ: Явно отримуємо назву дня тижня
+            days_of_week_short = ["Пн", "Вт", "Срд", "Чтв", "Птн", "Сбт", "Нд"]
+            day_name = days_of_week_short[dt_obj.weekday()]
+            
+            return dt_obj.strftime(f'{day_name}, %d.%m.%Y %H:%M') # Використовуємо явне ім'я дня
         except ValueError:
             try:
                 dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
@@ -509,7 +511,7 @@ def toggle_participation(event_id):
             break
 
     if found_participant_entry:
-        registration_time_str = found_time_str = p_entry["timestamp"] # Error in app.py from last turn
+        registration_time_str = found_participant_entry["timestamp"] 
         registration_time = datetime.strptime(registration_time_str, '%Y-%m-%d %H:%M:%S')
         
         if datetime.now() - registration_time > timedelta(hours=1):
