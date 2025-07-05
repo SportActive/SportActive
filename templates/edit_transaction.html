@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редагувати транзакцію - Клуб спортивних ігор</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Редагувати транзакцію</h1>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <a href="{{ url_for('logout') }}">Вийти</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Увійти</a> | 
+                <a href="{{ url_for('register') }}">Зареєструватися</a>
+            {% endif %}
+        </div>
+        
+        <nav class="main-nav">
+             <a href="{{ url_for('index') }}">Події</a>
+             <a href="{{ url_for('announcements') }}">Оголошення</a>
+             <a href="{{ url_for('polls') }}">Опитування</a>
+        </nav>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('edit_transaction', transaction_id=transaction.id) }}" method="POST" class="form-narrow">
+            <input type="text" name="description" placeholder="Опис" value="{{ transaction.description }}" required>
+            <input type="date" name="date" value="{{ transaction.date }}" required>
+            <input type="number" name="amount" step="0.01" placeholder="Сума" value="{{ transaction.form_amount }}" required>
+            <select name="transaction_type" required>
+                <option value="income" {% if transaction.transaction_type == 'income' %}selected{% endif %}>Надходження</option>
+                <option value="expense" {% if transaction.transaction_type == 'expense' %}selected{% endif %}>Витрата</option>
+            </select>
+            <button type="submit">Зберегти зміни</button>
+        </form>
+        <p><a href="{{ url_for('finances') }}" class="back-link">← Повернутися до фінансів</a></p>
+    </div>
+</body>
+</html>
