@@ -28,7 +28,12 @@
         <div class="auth-links">
             {% if current_user.is_authenticated %}
                 <p>Привіт, {{ current_user.username }}! 
-                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                {% if current_user.is_admin() %}
+                    <span class="admin-label">(Адміністратор)</span>
+                {% elif current_user.is_superuser() %}
+                    <span class="admin-label" style="background-color: #fffbe6; color: #8a6d3b; border-color: #ffeeba;">(Суперюзер)</span>
+                {% endif %}
+                </p>
                 <a href="{{ url_for('logout') }}">Вийти</a>
             {% else %}
                 <a href="{{ url_for('login') }}">Увійти</a> | 
@@ -41,13 +46,19 @@
             <a href="{{ url_for('announcements') }}">Оголошення</a>
             <a href="{{ url_for('polls') }}">Опитування</a>
             
-            {% if current_user.is_authenticated and current_user.is_admin() %}
+            {% if current_user.is_authenticated and current_user.can_manage_events() %}
                 <div class="dropdown">
                     <button class="dropbtn admin-action">Адміністрування ▼</button>
                     <div class="dropdown-content">
-                        <a href="{{ url_for('add_event') }}">Додати подію</a>
-                        <a href="{{ url_for('finances') }}">Керування фінансами</a>
-                        <a href="{{ url_for('game_log') }}">Журнал подій</a>
+                        {% if current_user.can_manage_events() %}
+                            <a href="{{ url_for('add_event') }}">Додати подію</a>
+                        {% endif %}
+                        {% if current_user.can_view_finances() %}
+                            <a href="{{ url_for('finances') }}">Керування фінансами</a>
+                        {% endif %}
+                        {% if current_user.is_admin() %}
+                            <a href="{{ url_for('game_log') }}">Журнал подій</a>
+                        {% endif %}
                     </div>
                 </div>
             {% endif %}
@@ -149,17 +160,19 @@
                                     {% endif %}
                                 </button>
                             </form>
-                            {% if current_user.is_admin() %}
+                            {% if current_user.can_manage_events() %}
                                 <div class="admin-event-actions">
                                     <a href="{{ url_for('manage_teams', event_id=event.id) }}" class="admin-manage-teams-link small-button">Керувати командами</a>
+                                    {% if current_user.is_admin() %}
                                     <a href="{{ url_for('edit_event', event_id=event.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
                                     <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;">
                                         <button type="submit" class="admin-delete-event-btn small-button" onclick="return confirm('Ви впевнені, що хочете видалити цю подію? Всі дані, пов’язані з нею (учасники, команди), будуть втрачені.');">Видалити</button>
                                     </form>
+                                    {% endif %}
                                 </div>
                             {% endif %}
                         {% else %}
-                            <p>Будь ласка, <a href="{{ url_for('login') }}">увійти</a>, щоб відмітити участь.</p>
+                            <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a>, щоб відмітити участь.</p>
                         {% endif %}
                     </div>
                 {% endfor %}

@@ -79,6 +79,19 @@ class User(db.Model, UserMixin):
 
     def is_admin(self):
         return self.role == 'admin'
+    
+    # НОВІ МЕТОДИ ДЛЯ ПЕРЕВІРКИ РОЛЕЙ
+    def is_superuser(self):
+        return self.role == 'superuser'
+
+    def can_manage_events(self):
+        return self.is_admin() or self.is_superuser()
+        
+    def can_view_finances(self):
+        return self.is_admin() or self.is_superuser()
+
+    def can_edit_finances(self):
+        return self.is_admin()
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -151,8 +164,6 @@ class GameLog(db.Model):
 
     def __repr__(self):
         return f"GameLog('{self.event_name}', '{self.event_date}')"
-
-# МОДЕЛЬ FeeLog ВИДАЛЕНО
 
 class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -396,7 +407,8 @@ def index():
 @app.route('/add_event', methods=['GET', 'POST'])
 @login_required
 def add_event():
-    if not current_user.is_admin():
+    # ОНОВЛЕНА ПЕРЕВІРКА
+    if not current_user.can_manage_events():
         flash('У вас немає дозволу на додавання подій.', 'error')
         return redirect(url_for('index'))
 
@@ -433,6 +445,7 @@ def add_event():
 @app.route('/edit_event/<int:event_id>', methods=['GET', 'POST'])
 @login_required
 def edit_event(event_id):
+    # ЦЯ ДІЯ ЛИШЕ ДЛЯ АДМІНА
     if not current_user.is_admin():
         flash('У вас немає дозволу на редагування подій.', 'error')
         return redirect(url_for('index'))
@@ -465,6 +478,7 @@ def edit_event(event_id):
 @app.route('/delete_event/<int:event_id>', methods=['POST'])
 @login_required
 def delete_event(event_id):
+    # ЦЯ ДІЯ ЛИШЕ ДЛЯ АДМІНА
     if not current_user.is_admin():
         flash('У вас немає дозволу на видалення подій.', 'error')
         return redirect(url_for('index'))
@@ -513,6 +527,7 @@ def toggle_participation(event_id):
 @login_required 
 def announcements():
     if request.method == 'POST':
+        # ЦЯ ДІЯ ЛИШЕ ДЛЯ АДМІНА
         if not current_user.is_admin():
             flash('У вас немає дозволу на додавання оголошень.', 'error')
             return redirect(url_for('announcements'))
@@ -622,13 +637,18 @@ def vote_poll(poll_id):
 @app.route('/finances', methods=['GET', 'POST'])
 @login_required
 def finances():
-    if not current_user.is_admin():
-        flash('У вас немає дозволу на керування фінансами.', 'error')
+    # ОНОВЛЕНА ПЕРЕВІРКА
+    if not current_user.can_view_finances():
+        flash('У вас немає дозволу на перегляд цієї сторінки.', 'error')
         return redirect(url_for('index'))
 
     if request.method == 'POST':
-        form_type = request.form.get('form_type')
+        # ТІЛЬКИ АДМІН МОЖЕ ЗМІНЮВАТИ ФІНАНСИ
+        if not current_user.can_edit_finances():
+            flash('У вас немає дозволу на виконання цієї дії.', 'error')
+            return redirect(url_for('finances'))
 
+        form_type = request.form.get('form_type')
         if form_type == 'add_transaction':
             description = request.form.get('description')
             date_str = request.form.get('date')
@@ -639,14 +659,7 @@ def finances():
                 try:
                     amount = float(amount_str)
                     final_amount = -amount if trans_type == 'expense' else amount
-                    
-                    new_transaction = FinancialTransaction(
-                        description=description,
-                        date=date_str,
-                        amount=final_amount,
-                        transaction_type=trans_type,
-                        logged_by_admin=current_user.username
-                    )
+                    new_transaction = FinancialTransaction(description=description, date=date_str, amount=final_amount, transaction_type=trans_type, logged_by_admin=current_user.username)
                     db.session.add(new_transaction)
                     db.session.commit()
                     flash('Транзакцію успішно додано!', 'success')
@@ -667,15 +680,8 @@ def finances():
                     fee_amount = float(fee_amount_str)
                     user.has_paid_fees = True
                     user.last_fee_payment_date = fee_date_str
-                    
                     fee_description = f"Членський внесок ({payment_period}) від {user.username}"
-                    new_fee_transaction = FinancialTransaction(
-                        description=fee_description,
-                        date=fee_date_str,
-                        amount=fee_amount,
-                        transaction_type='income',
-                        logged_by_admin=current_user.username
-                    )
+                    new_fee_transaction = FinancialTransaction(description=fee_description, date=fee_date_str, amount=fee_amount, transaction_type='income', logged_by_admin=current_user.username)
                     db.session.add(new_fee_transaction)
                     db.session.commit()
                     flash(f'Внесок для {user.username} успішно оновлено та записано до фінансів.', 'success')
@@ -696,76 +702,47 @@ def finances():
 
     end_of_month = (start_of_month + timedelta(days=32)).replace(day=1)
 
-    start_balance = db.session.query(func.sum(FinancialTransaction.amount)).filter(
-        FinancialTransaction.date < start_of_month.strftime('%Y-%m-%d')
-    ).scalar() or 0.0
-
-    transactions_this_month = FinancialTransaction.query.filter(
-        FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'),
-        FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d')
-    ).order_by(FinancialTransaction.date.desc()).all()
-
+    start_balance = db.session.query(func.sum(FinancialTransaction.amount)).filter(FinancialTransaction.date < start_of_month.strftime('%Y-%m-%d')).scalar() or 0.0
+    transactions_this_month = FinancialTransaction.query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'), FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d')).order_by(FinancialTransaction.date.desc()).all()
     total_income = sum(t.amount for t in transactions_this_month if t.transaction_type == 'income')
     total_expenses = sum(t.amount for t in transactions_this_month if t.transaction_type == 'expense')
-
     end_balance = start_balance + total_income + total_expenses
 
-    summary = {
-        'start_balance': round(start_balance, 2),
-        'total_income': round(total_income, 2),
-        'total_expenses': round(abs(total_expenses), 2),
-        'end_balance': round(end_balance, 2)
-    }
-
+    summary = {'start_balance': round(start_balance, 2), 'total_income': round(total_income, 2), 'total_expenses': round(abs(total_expenses), 2), 'end_balance': round(end_balance, 2)}
     users = User.query.order_by(User.username).all()
-    return render_template('finances.html', 
-                           users=users, 
-                           transactions=transactions_this_month,
-                           summary=summary,
-                           period_filter=period,
-                           current_user=current_user)
+    
+    return render_template('finances.html', users=users, transactions=transactions_this_month, summary=summary, period_filter=period, current_user=current_user)
 
 # --- Маршрути для редагування та видалення транзакцій ---
 @app.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
 @login_required
 def edit_transaction(transaction_id):
-    if not current_user.is_admin():
+    if not current_user.can_edit_finances():
         flash('У вас немає дозволу на цю дію.', 'error')
         return redirect(url_for('finances'))
 
     transaction = FinancialTransaction.query.get_or_404(transaction_id)
-
     if request.method == 'POST':
-        description = request.form.get('description')
-        date_str = request.form.get('date')
-        amount_str = request.form.get('amount')
-        trans_type = request.form.get('transaction_type')
+        # ... (логіка збереження)
+        transaction.description = request.form.get('description')
+        transaction.date = request.form.get('date')
+        transaction.transaction_type = request.form.get('transaction_type')
+        try:
+            amount = float(request.form.get('amount'))
+            transaction.amount = -amount if transaction.transaction_type == 'expense' else amount
+            db.session.commit()
+            flash('Транзакцію успішно оновлено!', 'success')
+            return redirect(url_for('finances'))
+        except (ValueError, TypeError):
+            flash('Невірний формат суми.', 'error')
 
-        if description and date_str and amount_str and trans_type:
-            try:
-                amount = float(amount_str)
-                final_amount = -amount if trans_type == 'expense' else amount
-
-                transaction.description = description
-                transaction.date = date_str
-                transaction.amount = final_amount
-                transaction.transaction_type = trans_type
-                
-                db.session.commit()
-                flash('Транзакцію успішно оновлено!', 'success')
-                return redirect(url_for('finances'))
-            except ValueError:
-                flash('Невірний формат суми.', 'error')
-        else:
-            flash('Будь ласка, заповніть усі поля.', 'error')
-    
     transaction.form_amount = abs(transaction.amount)
     return render_template('edit_transaction.html', transaction=transaction, current_user=current_user)
 
 @app.route('/delete_transaction/<int:transaction_id>', methods=['POST'])
 @login_required
 def delete_transaction(transaction_id):
-    if not current_user.is_admin():
+    if not current_user.can_edit_finances():
         flash('У вас немає дозволу на цю дію.', 'error')
         return redirect(url_for('finances'))
 
@@ -775,12 +752,38 @@ def delete_transaction(transaction_id):
     flash('Транзакцію успішно видалено.', 'success')
     return redirect(url_for('finances'))
 
+# --- НОВИЙ МАРШРУТ ДЛЯ ОНОВЛЕННЯ РОЛІ КОРІСТУВАЧА ---
+@app.route('/update_user_role/<int:user_id>', methods=['POST'])
+@login_required
+def update_user_role(user_id):
+    if not current_user.is_admin():
+        flash('Тільки адміністратор може змінювати ролі.', 'error')
+        return redirect(url_for('finances'))
+
+    user_to_update = User.query.get_or_404(user_id)
+    new_role = request.form.get('role')
+
+    if new_role in ['user', 'superuser', 'admin']:
+        # Заборона адміну понижувати власну роль, якщо він останній адмін
+        if user_to_update.id == current_user.id and user_to_update.is_admin() and new_role != 'admin':
+            admin_count = User.query.filter_by(role='admin').count()
+            if admin_count <= 1:
+                flash('Ви не можете змінити роль єдиного адміністратора.', 'error')
+                return redirect(url_for('finances'))
+
+        user_to_update.role = new_role
+        db.session.commit()
+        flash(f'Роль для користувача {user_to_update.username} оновлено на "{new_role}".', 'success')
+    else:
+        flash('Неприпустима роль.', 'error')
+
+    return redirect(url_for('finances'))
 
 # --- Маршруты для управления командами ---
 @app.route('/manage_teams/<int:event_id>')
 @login_required
 def manage_teams(event_id):
-    if not current_user.is_admin():
+    if not current_user.can_manage_events():
         flash('У вас немає дозволу на керування командами.', 'error')
         return redirect(url_for('index'))
 
@@ -794,7 +797,7 @@ def manage_teams(event_id):
 @app.route('/save_teams/<int:event_id>', methods=['POST'])
 @login_required
 def save_teams(event_id):
-    if not current_user.is_admin():
+    if not current_user.can_manage_events():
         flash('У вас немає дозволу на керування командами.', 'error')
         return redirect(url_for('index'))
 
@@ -845,16 +848,7 @@ def export_game_log():
     headers = ["Назва події", "Дата події", "Час логування", "Активні учасники", "Відмовилися учасники", "Команди", "URL зображення", "Коментар"]
     cw.writerow(headers)
     for log in game_logs:
-        row = [
-            log.event_name,
-            format_datetime_for_display(log.event_date),
-            format_datetime_for_display(log.logged_at),
-            ", ".join(log.active_participants),
-            ", ".join(log.cancelled_participants),
-            json.dumps(log.teams, ensure_ascii=False),
-            log.image_url or "",
-            log.comment or ""
-        ]
+        row = [log.event_name, format_datetime_for_display(log.event_date), format_datetime_for_display(log.logged_at), ", ".join(log.active_participants), ", ".join(log.cancelled_participants), json.dumps(log.teams, ensure_ascii=False), log.image_url or "", log.comment or ""]
         cw.writerow(row)
     
     output = si.getvalue()
@@ -863,11 +857,10 @@ def export_game_log():
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
-# --- НОВИЙ МАРШРУТ ДЛЯ ЕКСПОРТУ ФІНАНСІВ ---
 @app.route('/export_finances')
 @login_required
 def export_finances():
-    if not current_user.is_admin():
+    if not current_user.can_view_finances():
         flash('У вас немає дозволу на експорт.', 'error')
         return redirect(url_for('finances'))
 
@@ -883,24 +876,15 @@ def export_finances():
     cw = csv.writer(si)
     cw.writerow(["Дата", "Опис", "Тип", "Сума", "Хто додав", "Час додавання"])
     for t in transactions:
-        row = [
-            t.date,
-            t.description,
-            "Дохід" if t.transaction_type == 'income' else "Витрата",
-            t.amount,
-            t.logged_by_admin,
-            format_datetime_for_display(t.logged_at)
-        ]
+        row = [t.date, t.description, "Дохід" if t.transaction_type == 'income' else "Витрата", t.amount, t.logged_by_admin, format_datetime_for_display(t.logged_at)]
         cw.writerow(row)
 
     output = si.getvalue()
-    response = make_response('\ufeff' + output)
     filename = f"finances_{period_filter}.csv" if period_filter else "finances_all.csv"
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
-# МАРШРУТИ ДЛЯ FEE LOG ВИДАЛЕНО
 
 if __name__ == '__main__':
     with app.app_context():
