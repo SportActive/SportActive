@@ -27,9 +27,14 @@
             <a href="{{ url_for('announcements') }}">Оголошення</a>
             <a href="{{ url_for('polls') }}">Опитування</a>
             {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="{{ url_for('finances') }}" class="admin-action">Керувати внесками</a>
-                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
-                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
+                <div class="dropdown">
+                    <button class="dropbtn admin-action">Адміністрування ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('add_event') }}">Додати подію</a>
+                        <a href="{{ url_for('finances') }}">Керування фінансами</a>
+                        <a href="{{ url_for('game_log') }}">Журнал подій</a>
+                    </div>
+                </div>
             {% endif %}
         </nav>
 
@@ -43,7 +48,6 @@
           {% endif %}
         {% endwith %}
 
-        {# ФОРМА СТВОРЕННЯ ОПИТУВАННЯ ТУТ #}
         {% if current_user.is_authenticated and current_user.is_admin() %}
             <div class="create-poll-section form-section">
                 <h2>Створити нове опитування</h2>
@@ -60,7 +64,7 @@
         {% elif current_user.is_authenticated %}
             <p class="info-message">Лише адміністратори можуть створювати опитування.</p>
         {% else %}
-            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійти</a> як адміністратор, щоб створювати опитування.</p>
+            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб створювати опитування.</p>
         {% endif %}
 
 
