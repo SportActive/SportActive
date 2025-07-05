@@ -93,7 +93,7 @@ class Event(db.Model):
     image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
-    comment = db.Column(db.Text, nullable=True) # <-- НОВЕ ПОЛЕ
+    comment = db.Column(db.Text, nullable=True)
 
     @property
     def participants(self):
@@ -123,7 +123,7 @@ class GameLog(db.Model):
     cancelled_participants_json = db.Column(db.Text, default='[]')
     teams_json = db.Column(db.Text, default='{}')
     image_url = db.Column(db.String(255), nullable=True, default=None)
-    comment = db.Column(db.Text, nullable=True) # <-- НОВЕ ПОЛЕ
+    comment = db.Column(db.Text, nullable=True)
 
     @property
     def active_participants(self):
@@ -152,16 +152,7 @@ class GameLog(db.Model):
     def __repr__(self):
         return f"GameLog('{self.event_name}', '{self.event_date}')"
 
-class FeeLog(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), nullable=False)
-    payment_date = db.Column(db.String(10), nullable=False)
-    payment_period = db.Column(db.String(50), nullable=True, default=None)
-    logged_by_admin = db.Column(db.String(80), nullable=False)
-    logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-
-    def __repr__(self):
-        return f"FeeLog('{self.username}', '{self.payment_date}', '{self.payment_period}', '{self.logged_by_admin}')"
+# МОДЕЛЬ FeeLog ВИДАЛЕНО
 
 class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -343,7 +334,6 @@ def index():
             if event_dt < current_time: 
                 active_participants = [p["username"] for p in event.participants if p.get("status") == "active"]
                 cancelled_participants = [p["username"] for p in event.participants if p.get("status") == "cancelled"]
-                # ЗМІНА: Додано `comment` до логу
                 new_log_entry = GameLog(
                     event_name=event.name,
                     event_date=event.date,
@@ -414,13 +404,12 @@ def add_event():
         event_name = request.form['event_name']
         event_datetime_str = request.form['event_datetime'] 
         image_url = request.form.get('image_url')
-        comment = request.form.get('comment') # <-- ОТРИМУЄМО КОМЕНТАР
+        comment = request.form.get('comment')
 
         if event_name and event_datetime_str:
             try:
                 dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
                 formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
-                # ЗМІНА: Додаємо коментар при створенні події
                 new_event = Event(
                     name=event_name,
                     date=formatted_datetime,
@@ -454,7 +443,7 @@ def edit_event(event_id):
         event.name = request.form['event_name']
         event_datetime_str = request.form['event_datetime']
         event.image_url = request.form.get('image_url') or None
-        event.comment = request.form.get('comment') # <-- ОНОВЛЮЄМО КОМЕНТАР
+        event.comment = request.form.get('comment')
 
         try:
             dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
@@ -853,7 +842,6 @@ def export_game_log():
 
     si = StringIO()
     cw = csv.writer(si)
-    # ЗМІНА: Додано "Коментар" до заголовків експорту
     headers = ["Назва події", "Дата події", "Час логування", "Активні учасники", "Відмовилися учасники", "Команди", "URL зображення", "Коментар"]
     cw.writerow(headers)
     for log in game_logs:
@@ -865,7 +853,7 @@ def export_game_log():
             ", ".join(log.cancelled_participants),
             json.dumps(log.teams, ensure_ascii=False),
             log.image_url or "",
-            log.comment or "" # Додаємо коментар до рядка
+            log.comment or ""
         ]
         cw.writerow(row)
     
@@ -875,44 +863,44 @@ def export_game_log():
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
-@app.route('/fee_log')
+# --- НОВИЙ МАРШРУТ ДЛЯ ЕКСПОРТУ ФІНАНСІВ ---
+@app.route('/export_finances')
 @login_required
-def fee_log():
+def export_finances():
     if not current_user.is_admin():
-        flash('У вас немає дозволу на перегляд журналу оплат.', 'error')
-        return redirect(url_for('index'))
-    
-    period_filter = request.args.get('period', '').strip()
-    query = FeeLog.query
-    if period_filter:
-        query = query.filter(FeeLog.payment_period == period_filter)
-    fee_logs = query.order_by(FeeLog.logged_at.desc()).all()
-    return render_template('fee_log.html', fee_logs=fee_logs, current_user=current_user, period_filter=period_filter)
-
-@app.route('/export_fee_log')
-@login_required
-def export_fee_log():
-    if not current_user.is_admin():
-        return redirect(url_for('index'))
+        flash('У вас немає дозволу на експорт.', 'error')
+        return redirect(url_for('finances'))
 
     period_filter = request.args.get('period', '').strip()
-    query = FeeLog.query
+
+    query = FinancialTransaction.query
     if period_filter:
-        query = query.filter(FeeLog.payment_period == period_filter)
-    fee_logs = query.order_by(FeeLog.logged_at.desc()).all()
-    
+        query = query.filter(FinancialTransaction.date.startswith(period_filter))
+
+    transactions = query.order_by(FinancialTransaction.date.asc()).all()
+
     si = StringIO()
     cw = csv.writer(si)
-    cw.writerow(["Користувач", "Дата оплати", "Період розрахунків", "Хто відмітив", "Час логування"])
-    for log in fee_logs:
-        cw.writerow([log.username, format_date_only_for_display(log.payment_date), log.payment_period or "", log.logged_by_admin, format_datetime_for_display(log.logged_at)])
-    
+    cw.writerow(["Дата", "Опис", "Тип", "Сума", "Хто додав", "Час додавання"])
+    for t in transactions:
+        row = [
+            t.date,
+            t.description,
+            "Дохід" if t.transaction_type == 'income' else "Витрата",
+            t.amount,
+            t.logged_by_admin,
+            format_datetime_for_display(t.logged_at)
+        ]
+        cw.writerow(row)
+
     output = si.getvalue()
     response = make_response('\ufeff' + output)
-    response.headers["Content-Disposition"] = "attachment; filename=fee_log.csv"
+    filename = f"finances_{period_filter}.csv" if period_filter else "finances_all.csv"
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
+# МАРШРУТИ ДЛЯ FEE LOG ВИДАЛЕНО
 
 if __name__ == '__main__':
     with app.app_context():
