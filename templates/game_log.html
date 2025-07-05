@@ -27,9 +27,15 @@
             <a href="{{ url_for('announcements') }}">Оголошення</a>
             <a href="{{ url_for('polls') }}">Опитування</a>
             {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="{{ url_for('finances') }}" class="admin-action">Керувати внесками</a>
-                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
-                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
+                <div class="dropdown">
+                    <button class="dropbtn admin-action">Адміністрування ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('add_event') }}">Додати подію</a>
+                        <a href="{{ url_for('finances') }}">Керування фінансами</a>
+                        <a href="{{ url_for('game_log') }}">Журнал подій</a>
+                        <a href="{{ url_for('fee_log') }}">Журнал оплат</a>
+                    </div>
+                </div>
             {% endif %}
         </nav>
 
@@ -46,13 +52,11 @@
         <div class="game-log-list">
             {% if current_user.is_admin() %}
                 <div class="log-actions">
-                    {# Форма фільтрації за періодом #}
-                    <form action="{{ url_for('game_log') }}" method="GET" class="inline-form fee-filter-form"> {# Використовуємо той же стиль форми #}
+                    <form action="{{ url_for('game_log') }}" method="GET" class="inline-form fee-filter-form">
                         <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
                         <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
                         <button type="submit" class="small-button">Фільтрувати</button>
                     </form>
-                    {# Кнопка експорту (тепер може включати фільтр) #}
                     <a href="{{ url_for('export_game_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал подій (CSV)</a>
                 </div>
                 
@@ -62,19 +66,20 @@
                             <tr>
                                 <th>Подія</th>
                                 <th>Дата</th>
-                                <th>Час логування</th>
-                                <th>Учасники (активні)</th>
+                                <th>Коментар</th> <th>Учасники (активні)</th>
                                 <th>Учасники (відмовилися)</th>
                                 <th>Команди</th>
-                                <th>Зображення</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for log in game_logs %}
                                 <tr>
-                                    <td>{{ log.event_name }}</td>
+                                    <td>
+                                        {{ log.event_name }}
+                                        {% if log.image_url %}<img src="{{ log.image_url }}" alt="Зображення події" class="log-event-image">{% endif %}
+                                    </td>
                                     <td>{{ format_datetime_for_display(log.event_date) }}</td>
-                                    <td>{{ format_datetime_for_display(log.logged_at) }}</td>
+                                    <td>{{ log.comment if log.comment else 'Н/Д' }}</td>
                                     <td>
                                         {% if log.active_participants %}
                                             {{ log.active_participants | join(', ') }}
@@ -96,13 +101,6 @@
                                                 <li><strong>{{ team_name }}:</strong> {{ members | join(', ') }}</li>
                                             {% endfor %}
                                             </ul>
-                                        {% else %}
-                                            Н/Д
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if log.image_url %}
-                                            <img src="{{ log.image_url }}" alt="Зображення події" class="log-event-image">
                                         {% else %}
                                             Н/Д
                                         {% endif %}

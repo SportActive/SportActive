@@ -3,15 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Активно-спортивні ми</title> {# ВИПРАВЛЕНО ТУТ #}
+    <title>Активно-спортивні ми</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <style>
+        .event-comment {
+            background-color: #fffbe6;
+            border-left: 4px solid #ffc107;
+            padding: 10px 15px;
+            margin-top: 15px;
+            border-radius: 4px;
+            font-style: italic;
+            color: #5d4c15;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <h1 class="main-title">
             <img src="{{ url_for('static', filename='favicon.png') }}" alt="Логотип" class="main-title-icon">
-            Активно-спортивні ми {# ВИПРАВЛЕНО ТУТ #}
+            Активно-спортивні ми
         </h1>
 
         <div class="auth-links">
@@ -30,13 +41,12 @@
             <a href="{{ url_for('announcements') }}">Оголошення</a>
             <a href="{{ url_for('polls') }}">Опитування</a>
             
-            {# НОВЕ: Випадаюче меню для адміністраторів #}
             {% if current_user.is_authenticated and current_user.is_admin() %}
                 <div class="dropdown">
                     <button class="dropbtn admin-action">Адміністрування ▼</button>
                     <div class="dropdown-content">
                         <a href="{{ url_for('add_event') }}">Додати подію</a>
-                        <a href="{{ url_for('finances') }}">Керувати внесками</a>
+                        <a href="{{ url_for('finances') }}">Керування фінансами</a>
                         <a href="{{ url_for('game_log') }}">Журнал подій</a>
                         <a href="{{ url_for('fee_log') }}">Журнал оплат</a>
                     </div>
@@ -54,10 +64,6 @@
           {% endif %}
         {% endwith %}
 
-        {# Форма "Додати нову подію" була тут, але тепер доступна через dropdown меню "Адміністрування" -> "Додати подію" #}
-
-
-        {# Персональний календар подій на 7 днів #}
         {% if current_user.is_authenticated and user_events_next_7_days %}
             <div class="personal-calendar-section">
                 <h2>Ваші події на наступні 7 днів</h2>
@@ -85,6 +91,13 @@
                             <img src="{{ event.image_url }}" alt="{{ event.name }}" class="event-image">
                         {% endif %}
                         <h3>{{ event.name }} - {{ format_datetime_for_display(event.date) }}</h3>
+                        
+                        {% if event.comment %}
+                            <div class="event-comment">
+                                <p><strong>Інформація:</strong> {{ event.comment }}</p>
+                            </div>
+                        {% endif %}
+
                         {% set active_participants_count = 0 %}
                         {% for p_entry in event.processed_participants %}
                             {% if p_entry.status == 'active' %}
@@ -97,14 +110,13 @@
                         <ul>
                             {% for p_entry in event.processed_participants %}
                                 <li>
-                                    <span class="participant-name-wrapper"> {# Контейнер для імені та бейджа оплати #}
+                                    <span class="participant-name-wrapper">
                                         {{ p_entry.username }} 
                                         {% if users_fee_status[p_entry.username] is defined and users_fee_status[p_entry.username] %}
                                             <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
                                         {% endif %}
                                     </span>
                                     
-                                    {# Назва команди зі смайликом #}
                                     {% if p_entry.assigned_team_name %}
                                         <span class="team-name-badge">{{ p_entry.assigned_team_name }} 😉</span>
                                     {% endif %}

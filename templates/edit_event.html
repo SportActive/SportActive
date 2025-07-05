@@ -26,11 +26,6 @@
             <a href="{{ url_for('index') }}">Події</a>
             <a href="{{ url_for('announcements') }}">Оголошення</a>
             <a href="{{ url_for('polls') }}">Опитування</a>
-            {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="{{ url_for('finances') }}" class="admin-action">Керувати внесками</a>
-                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
-                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
-            {% endif %}
         </nav>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -45,9 +40,9 @@
 
         <form action="{{ url_for('edit_event', event_id=event.id) }}" method="POST" class="form-narrow">
             <input type="text" name="event_name" placeholder="Назва події" value="{{ event.name }}" required>
-            {# event.formatted_datetime_local має бути встановлено в app.py #}
             <input type="datetime-local" name="event_datetime" value="{{ event.formatted_datetime_local }}" required>
             <input type="url" name="image_url" placeholder="URL зображення" value="{{ event.image_url if event.image_url else '' }}">
+            <textarea name="comment" placeholder="Коментар (напр. місце проведення, особливості)" rows="4">{{ event.comment if event.comment else '' }}</textarea>
             <button type="submit">Зберегти зміни</button>
         </form>
         <p><a href="{{ url_for('index') }}" class="back-link">← Повернутися до подій</a></p>

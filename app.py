@@ -93,6 +93,7 @@ class Event(db.Model):
     image_url = db.Column(db.String(255), nullable=True, default=None) 
     participants_json = db.Column(db.Text, default='[]') 
     teams_json = db.Column(db.Text, default='{}')
+    comment = db.Column(db.Text, nullable=True) # <-- НОВЕ ПОЛЕ
 
     @property
     def participants(self):
@@ -122,6 +123,7 @@ class GameLog(db.Model):
     cancelled_participants_json = db.Column(db.Text, default='[]')
     teams_json = db.Column(db.Text, default='{}')
     image_url = db.Column(db.String(255), nullable=True, default=None)
+    comment = db.Column(db.Text, nullable=True) # <-- НОВЕ ПОЛЕ
 
     @property
     def active_participants(self):
@@ -341,7 +343,16 @@ def index():
             if event_dt < current_time: 
                 active_participants = [p["username"] for p in event.participants if p.get("status") == "active"]
                 cancelled_participants = [p["username"] for p in event.participants if p.get("status") == "cancelled"]
-                new_log_entry = GameLog(event_name=event.name, event_date=event.date, active_participants=active_participants, cancelled_participants=cancelled_participants, teams=event.teams, image_url=event.image_url)
+                # ЗМІНА: Додано `comment` до логу
+                new_log_entry = GameLog(
+                    event_name=event.name,
+                    event_date=event.date,
+                    active_participants=active_participants,
+                    cancelled_participants=cancelled_participants,
+                    teams=event.teams,
+                    image_url=event.image_url,
+                    comment=event.comment 
+                )
                 db.session.add(new_log_entry)
                 events_to_delete.append(event) 
             else:
@@ -353,7 +364,8 @@ def index():
     for event in events_to_delete:
         db.session.delete(event)
     
-    db.session.commit() 
+    if events_to_delete:
+        db.session.commit() 
 
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
@@ -398,28 +410,36 @@ def add_event():
         flash('У вас немає дозволу на додавання подій.', 'error')
         return redirect(url_for('index'))
 
-    if request.method == 'GET':
-        return render_template('add_event.html', current_user=current_user)
+    if request.method == 'POST':
+        event_name = request.form['event_name']
+        event_datetime_str = request.form['event_datetime'] 
+        image_url = request.form.get('image_url')
+        comment = request.form.get('comment') # <-- ОТРИМУЄМО КОМЕНТАР
 
-    event_name = request.form['event_name']
-    event_datetime_str = request.form['event_datetime'] 
-    image_url = request.form.get('image_url') 
-
-    if event_name and event_datetime_str:
-        try:
-            dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
-            formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
-            new_event = Event(name=event_name, date=formatted_datetime, participants_json='[]', teams_json='{}', image_url=image_url if image_url else None)
-            db.session.add(new_event)
-            db.session.commit()
-            flash('Подію успішно додано!', 'success')
-            return redirect(url_for('index'))
-        except ValueError:
-            flash('Неправильний формат дати або часу. Використовуйте РРРР-ММ-ДД HH:MM.', 'error')
-    else:
-        flash('Будь ласка, заповніть усі поля для події.', 'error')
+        if event_name and event_datetime_str:
+            try:
+                dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
+                formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+                # ЗМІНА: Додаємо коментар при створенні події
+                new_event = Event(
+                    name=event_name,
+                    date=formatted_datetime,
+                    image_url=image_url if image_url else None,
+                    comment=comment,
+                    participants_json='[]',
+                    teams_json='{}'
+                )
+                db.session.add(new_event)
+                db.session.commit()
+                flash('Подію успішно додано!', 'success')
+                return redirect(url_for('index'))
+            except ValueError:
+                flash('Неправильний формат дати або часу. Використовуйте РРРР-ММ-ДД HH:MM.', 'error')
+        else:
+            flash('Будь ласка, заповніть усі поля для події.', 'error')
     
     return render_template('add_event.html', current_user=current_user)
+
 
 @app.route('/edit_event/<int:event_id>', methods=['GET', 'POST'])
 @login_required
@@ -434,6 +454,7 @@ def edit_event(event_id):
         event.name = request.form['event_name']
         event_datetime_str = request.form['event_datetime']
         event.image_url = request.form.get('image_url') or None
+        event.comment = request.form.get('comment') # <-- ОНОВЛЮЄМО КОМЕНТАР
 
         try:
             dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
@@ -832,9 +853,21 @@ def export_game_log():
 
     si = StringIO()
     cw = csv.writer(si)
-    cw.writerow(["Назва події", "Дата події", "Час логування", "Активні учасники", "Відмовилися учасники", "Команди", "URL зображення"])
+    # ЗМІНА: Додано "Коментар" до заголовків експорту
+    headers = ["Назва події", "Дата події", "Час логування", "Активні учасники", "Відмовилися учасники", "Команди", "URL зображення", "Коментар"]
+    cw.writerow(headers)
     for log in game_logs:
-        cw.writerow([log.event_name, format_datetime_for_display(log.event_date), format_datetime_for_display(log.logged_at), ", ".join(log.active_participants), ", ".join(log.cancelled_participants), json.dumps(log.teams, ensure_ascii=False), log.image_url or ""])
+        row = [
+            log.event_name,
+            format_datetime_for_display(log.event_date),
+            format_datetime_for_display(log.logged_at),
+            ", ".join(log.active_participants),
+            ", ".join(log.cancelled_participants),
+            json.dumps(log.teams, ensure_ascii=False),
+            log.image_url or "",
+            log.comment or "" # Додаємо коментар до рядка
+        ]
+        cw.writerow(row)
     
     output = si.getvalue()
     response = make_response('\ufeff' + output)
