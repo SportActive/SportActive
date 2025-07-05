@@ -198,7 +198,6 @@ class Poll(db.Model):
     def __repr__(self):
         return f"Poll('{self.question}', '{self.date}')"
 
-# НОВА МОДЕЛЬ
 class FinancialTransaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     description = db.Column(db.String(255), nullable=False)
@@ -210,6 +209,7 @@ class FinancialTransaction(db.Model):
 
     def __repr__(self):
         return f"FinancialTransaction('{self.date}', '{self.description}', {self.amount})"
+
 
 # --- Загрузчик пользователя для Flask-Login ---
 @login_manager.user_loader
@@ -608,7 +608,7 @@ def vote_poll(poll_id):
     
     return redirect(url_for('polls'))
 
-# --- НОВИЙ МАРШРУТ ДЛЯ КЕРУВАННЯ ФІНАНСАМИ ---
+# --- Маршрут для керування фінансами ---
 @app.route('/finances', methods=['GET', 'POST'])
 @login_required
 def finances():
@@ -616,11 +616,9 @@ def finances():
         flash('У вас немає дозволу на керування фінансами.', 'error')
         return redirect(url_for('index'))
 
-    # Обробка POST-запитів (додавання транзакцій)
     if request.method == 'POST':
         form_type = request.form.get('form_type')
 
-        # Форма для додавання загальної транзакції (дохід/витрата)
         if form_type == 'add_transaction':
             description = request.form.get('description')
             date_str = request.form.get('date')
@@ -647,7 +645,6 @@ def finances():
             else:
                 flash('Будь ласка, заповніть усі поля для транзакції.', 'error')
 
-        # Форма для оновлення членського внеску
         elif form_type == 'update_user_fee':
             user_id = request.form.get('user_id')
             fee_date_str = request.form.get('fee_date')
@@ -679,7 +676,6 @@ def finances():
 
         return redirect(url_for('finances', period=request.args.get('period', '')))
 
-    # Логіка для GET-запиту (відображення сторінки)
     period = request.args.get('period', datetime.now().strftime('%Y-%m'))
     
     try:
@@ -718,6 +714,57 @@ def finances():
                            summary=summary,
                            period_filter=period,
                            current_user=current_user)
+
+# --- Маршрути для редагування та видалення транзакцій ---
+@app.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
+@login_required
+def edit_transaction(transaction_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на цю дію.', 'error')
+        return redirect(url_for('finances'))
+
+    transaction = FinancialTransaction.query.get_or_404(transaction_id)
+
+    if request.method == 'POST':
+        description = request.form.get('description')
+        date_str = request.form.get('date')
+        amount_str = request.form.get('amount')
+        trans_type = request.form.get('transaction_type')
+
+        if description and date_str and amount_str and trans_type:
+            try:
+                amount = float(amount_str)
+                final_amount = -amount if trans_type == 'expense' else amount
+
+                transaction.description = description
+                transaction.date = date_str
+                transaction.amount = final_amount
+                transaction.transaction_type = trans_type
+                
+                db.session.commit()
+                flash('Транзакцію успішно оновлено!', 'success')
+                return redirect(url_for('finances'))
+            except ValueError:
+                flash('Невірний формат суми.', 'error')
+        else:
+            flash('Будь ласка, заповніть усі поля.', 'error')
+    
+    transaction.form_amount = abs(transaction.amount)
+    return render_template('edit_transaction.html', transaction=transaction, current_user=current_user)
+
+@app.route('/delete_transaction/<int:transaction_id>', methods=['POST'])
+@login_required
+def delete_transaction(transaction_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на цю дію.', 'error')
+        return redirect(url_for('finances'))
+
+    transaction = FinancialTransaction.query.get_or_404(transaction_id)
+    db.session.delete(transaction)
+    db.session.commit()
+    flash('Транзакцію успішно видалено.', 'success')
+    return redirect(url_for('finances'))
+
 
 # --- Маршруты для управления командами ---
 @app.route('/manage_teams/<int:event_id>')
@@ -832,6 +879,7 @@ def export_fee_log():
     response.headers["Content-Disposition"] = "attachment; filename=fee_log.csv"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
+
 
 if __name__ == '__main__':
     with app.app_context():
