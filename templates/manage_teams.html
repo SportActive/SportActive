@@ -15,7 +15,12 @@
         <div class="auth-links">
             {% if current_user.is_authenticated %}
                 <p>Привіт, {{ current_user.username }}! 
-                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                {% if current_user.is_admin() %}
+                    <span class="admin-label">(Адміністратор)</span>
+                {% elif current_user.is_superuser() %}
+                    <span class="admin-label" style="background-color: #fffbe6; color: #8a6d3b; border-color: #ffeeba;">(Суперюзер)</span>
+                {% endif %}
+                </p>
                 <a href="{{ url_for('logout') }}">Вийти</a>
             {% else %}
                 <a href="{{ url_for('login') }}">Увійти</a> | 
@@ -27,10 +32,21 @@
             <a href="{{ url_for('index') }}">Події</a>
             <a href="{{ url_for('announcements') }}">Оголошення</a>
             <a href="{{ url_for('polls') }}">Опитування</a>
-            {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="{{ url_for('finances') }}" class="admin-action">Керувати внесками</a>
-                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
-                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
+            {% if current_user.is_authenticated and current_user.can_manage_events() %}
+                <div class="dropdown">
+                    <button class="dropbtn admin-action">Адміністрування ▼</button>
+                    <div class="dropdown-content">
+                        {% if current_user.can_manage_events() %}
+                            <a href="{{ url_for('add_event') }}">Додати подію</a>
+                        {% endif %}
+                        {% if current_user.can_view_finances() %}
+                            <a href="{{ url_for('finances') }}">Керування фінансами</a>
+                        {% endif %}
+                        {% if current_user.is_admin() %}
+                            <a href="{{ url_for('game_log') }}">Журнал подій</a>
+                        {% endif %}
+                    </div>
+                </div>
             {% endif %}
         </nav>
 
@@ -58,7 +74,6 @@
 
             <form action="{{ url_for('save_teams', event_id=event.id) }}" method="POST" class="teams-form">
                 <div id="teams-container">
-                    {# Динамічно додані команди або існуючі #}
                     {% if event.teams %}
                         {% for team_name, members in event.teams.items() %}
                             <div class="team-block">
@@ -83,9 +98,8 @@
     </div>
 
     <script>
-        // JavaScript для додавання/видалення полів команд
         document.addEventListener('DOMContentLoaded', function() {
-            let teamIndex = Object.keys({{ event.teams | tojson }}).length; // Початковий індекс для нових команд, враховуємо існуючі
+            let teamIndex = Object.keys({{ event.teams | tojson }}).length;
 
             document.getElementById('add-team-btn').addEventListener('click', function() {
                 const container = document.getElementById('teams-container');
@@ -106,58 +120,17 @@
                 }
             });
 
-            // Реалізація перетягування (Drag & Drop)
             const unassignedList = document.getElementById('unassigned-list');
             let draggedItem = null;
 
-            // Обробка початку перетягування
             unassignedList.addEventListener('dragstart', (e) => {
                 draggedItem = e.target;
-                e.dataTransfer.setData('text/plain', draggedItem.dataset.name); // Передаємо ім'я учасника
-                e.target.classList.add('dragging');
+                e.dataTransfer.setData('text/plain', draggedItem.dataset.name);
+                setTimeout(() => {
+                    e.target.classList.add('dragging');
+                }, 0);
             });
 
             unassignedList.addEventListener('dragend', (e) => {
                 e.target.classList.remove('dragging');
             });
-
-            // Обробка входу/виходу над зонами drop
-            document.getElementById('teams-container').addEventListener('dragover', (e) => {
-                e.preventDefault(); // Дозволяємо drop
-                if (e.target.tagName === 'TEXTAREA') {
-                    e.target.classList.add('drag-over');
-                }
-            });
-
-            document.getElementById('teams-container').addEventListener('dragleave', (e) => {
-                if (e.target.tagName === 'TEXTAREA') {
-                    e.target.classList.remove('drag-over');
-                }
-            });
-
-            // Обробка drop
-            document.getElementById('teams-container').addEventListener('drop', (e) => {
-                e.preventDefault();
-                if (e.target.tagName === 'TEXTAREA') {
-                    e.target.classList.remove('drag-over');
-                    const participantName = e.dataTransfer.getData('text/plain');
-                    const textarea = e.target;
-                    let currentText = textarea.value.trim();
-                    if (currentText) {
-                        currentText += ', ' + participantName;
-                    } else {
-                        currentText = participantName;
-                    }
-                    textarea.value = currentText;
-
-                    // Видалити перетягнутого учасника зі списку нерозподілених
-                    if (draggedItem) {
-                        draggedItem.remove();
-                        draggedItem = null;
-                    }
-                }
-            });
-        });
-    </script>
-</body>
-</html>
