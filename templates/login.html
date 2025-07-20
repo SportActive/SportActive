@@ -10,23 +10,20 @@
 <body>
     <div class="container">
         <h1>Вхід</h1>
-
         {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <ul class="flashes">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-            </ul>
-          {% endif %}
+          {% if messages %}<ul class="flashes">{% for category, message in messages %}<li class="{{ category }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
         {% endwith %}
 
-        <form action="{{ url_for('login') }}" method="POST">
-            <input type="text" name="username" placeholder="Ім'я користувача" required>
+        <form action="{{ url_for('login') }}" method="POST" class="form-narrow">
+            <input type="text" name="username" placeholder="Логін" required>
             <input type="password" name="password" placeholder="Пароль" required>
             <button type="submit">Увійти</button>
         </form>
-        <p>Немає облікового запису? <a href="{{ url_for('register') }}">Зареєструватися</a></p>
+        
+        <div style="text-align: center; margin-top: 15px;">
+            <p style="margin-bottom: 5px;">Немає облікового запису? <a href="{{ url_for('register') }}">Зареєструватися</a></p>
+            <p><a href="{{ url_for('reset_password_request') }}">Забули пароль?</a></p>
+        </div>
     </div>
 </body>
 </html>

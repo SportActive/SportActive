@@ -10,6 +10,7 @@ import csv
 from io import StringIO
 from sqlalchemy import func
 import itertools
+from itsdangerous import URLSafeTimedSerializer
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this')
@@ -22,6 +23,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+s = URLSafeTimedSerializer(app.secret_key)
 
 # --- Палітра кольорів для команд ---
 TEAM_COLORS_PALETTE = [
@@ -115,6 +117,18 @@ class User(db.Model, UserMixin):
     @seen_items.setter
     def seen_items(self, value):
         self.seen_items_json = json.dumps(value)
+
+    def get_reset_token(self, expires_sec=1800):
+        return s.dumps({'user_id': self.id}, salt='password-reset-salt')
+
+    @staticmethod
+    def verify_reset_token(token, expires_sec=1800):
+        try:
+            data = s.loads(token, salt='password-reset-salt', max_age=expires_sec)
+            user_id = data.get('user_id')
+        except Exception:
+            return None
+        return User.query.get(user_id)
 
     def is_admin(self): return self.role == 'admin'
     def is_superuser(self): return self.role == 'superuser'
@@ -341,6 +355,55 @@ def confirm_email(token):
     else:
         flash('Недійсний токен підтвердження.', 'error')
         return redirect(url_for('login'))
+
+@app.route('/reset_password_request', methods=['GET', 'POST'])
+def reset_password_request():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        email = request.form.get('email')
+        user = User.query.filter_by(email=email).first()
+        if user:
+            token = user.get_reset_token()
+            reset_url = url_for('reset_password', token=token, _external=True)
+            msg = Message('Запит на відновлення пароля', sender=app.config['MAIL_DEFAULT_SENDER'], recipients=[user.email])
+            msg.body = f"""Привіт, {user.nickname or user.username}!
+
+Щоб відновити ваш пароль, будь ласка, перейдіть за посиланням нижче.
+Посилання буде активним протягом 30 хвилин.
+
+{reset_url}
+
+Якщо ви не робили цей запит, просто проігноруйте цей лист."""
+            try:
+                mail.send(msg)
+            except Exception as e:
+                flash(f'Не вдалося надіслати лист. Помилка: {e}', 'error')
+                return redirect(url_for('reset_password_request'))
+        
+        flash('Якщо такий email зареєстровано, на нього було надіслано інструкції з відновлення пароля.', 'info')
+        return redirect(url_for('login'))
+
+    return render_template('reset_request.html')
+
+@app.route('/reset_password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    user = User.verify_reset_token(token)
+    if not user:
+        flash('Посилання для відновлення пароля недійсне або його термін дії закінчився.', 'error')
+        return redirect(url_for('reset_password_request'))
+
+    if request.method == 'POST':
+        password = request.form.get('password')
+        user.password_hash = generate_password_hash(password)
+        db.session.commit()
+        flash('Ваш пароль успішно оновлено! Тепер ви можете увійти.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html', token=token)
 
 # --- Основные маршруты приложения ---
 @app.route('/')
