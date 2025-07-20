@@ -10,63 +10,49 @@
 <body>
     <div class="container">
         <h1>Опитування</h1>
-
         <div class="auth-links">
             {% if current_user.is_authenticated %}
-                <p>Привіт, {{ current_user.username }}! 
-                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
+                <p>Привіт, {{ current_user.nickname or current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% elif current_user.is_superuser() %}<span class="admin-label" style="background-color: #fffbe6; color: #8a6d3b; border-color: #ffeeba;">(Суперюзер)</span>{% endif %}
+                </p>
                 <a href="{{ url_for('logout') }}">Вийти</a>
             {% else %}
-                <a href="{{ url_for('login') }}">Увійти</a> | 
-                <a href="{{ url_for('register') }}">Зареєструватися</a>
+                <a href="{{ url_for('login') }}">Увійти</a> | <a href="{{ url_for('register') }}">Зареєструватися</a>
             {% endif %}
         </div>
-
         <nav class="main-nav">
             <a href="{{ url_for('index') }}">Події</a>
-            <a href="{{ url_for('announcements') }}">Оголошення</a>
-            <a href="{{ url_for('polls') }}">Опитування</a>
-            {% if current_user.is_authenticated and current_user.is_admin() %}
-                <div class="dropdown">
-                    <button class="dropbtn admin-action">Адміністрування ▼</button>
-                    <div class="dropdown-content">
-                        <a href="{{ url_for('add_event') }}">Додати подію</a>
-                        <a href="{{ url_for('finances') }}">Керування фінансами</a>
-                        <a href="{{ url_for('game_log') }}">Журнал подій</a>
-                    </div>
+            <a href="{{ url_for('announcements') }}">Оголошення {% if has_unread_announcements %}<span class="new-indicator"></span>{% endif %}</a>
+            <a href="{{ url_for('polls') }}">Опитування {% if has_unread_polls %}<span class="new-indicator"></span>{% endif %}</a>
+            {% if current_user.is_authenticated and current_user.can_manage_events() %}
+            <div class="dropdown">
+                <button class="dropbtn admin-action">Адміністрування ▼</button>
+                <div class="dropdown-content">
+                    {% if current_user.can_manage_events() %}<a href="{{ url_for('add_event') }}">Додати подію</a>{% endif %}
+                    {% if current_user.can_view_finances() %}<a href="{{ url_for('finances') }}">Керування фінансами</a>{% endif %}
+                    {% if current_user.is_admin() %}<a href="{{ url_for('game_log') }}">Журнал подій</a>{% endif %}
                 </div>
+            </div>
             {% endif %}
         </nav>
-
         {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <ul class="flashes">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-            </ul>
-          {% endif %}
+          {% if messages %}<ul class="flashes">{% for category, message in messages %}<li class="{{ category }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
         {% endwith %}
 
         {% if current_user.is_authenticated and current_user.is_admin() %}
             <div class="create-poll-section form-section">
                 <h2>Створити нове опитування</h2>
-                <form action="{{ url_for('polls') }}" method="POST" class="form-narrow">
+                <form action="{{ url_for('add_poll') }}" method="POST" class="form-narrow">
                     <input type="text" name="question" placeholder="Питання для опитування" required>
                     <input type="text" name="option1" placeholder="Варіант відповіді 1" required>
                     <input type="text" name="option2" placeholder="Варіант відповіді 2" required>
-                    <input type="text" name="option3" placeholder="Варіант відповіді 3 (необов'язково)">
-                    <input type="text" name="option4" placeholder="Варіант відповіді 4 (необов'язково)">
-                    <input type="text" name="option5" placeholder="Варіант відповіді 5 (необов'язково)">
+                    <input type="text" name="option3" placeholder="Варіант відповіді 3">
+                    <input type="text" name="option4" placeholder="Варіант відповіді 4">
+                    <input type="text" name="option5" placeholder="Варіант відповіді 5">
                     <button type="submit">Створити опитування</button>
                 </form>
             </div>
-        {% elif current_user.is_authenticated %}
-            <p class="info-message">Лише адміністратори можуть створювати опитування.</p>
-        {% else %}
-            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб створювати опитування.</p>
         {% endif %}
-
 
         <div class="polls-list">
             <h2>Активні опитування</h2>
@@ -80,7 +66,7 @@
                             <form action="{{ url_for('vote_poll', poll_id=poll.id) }}" method="POST">
                                 {% for option_index, option in enumerate(poll.options) %}
                                     <label class="poll-option-label">
-                                        <input type="radio" name="option_index" value="{{ option_index }}" required>
+                                        <input type="checkbox" name="option_indices" value="{{ option_index }}">
                                         {{ option.text }}
                                     </label><br>
                                 {% endfor %}
@@ -90,22 +76,16 @@
                             <div class="poll-results">
                                 <p>Результати:</p>
                                 <ul>
-                                    {% set total_votes = 0 %}
-                                    {% for option in poll.options %}{% set total_votes = total_votes + option.votes %}{% endfor %}
-
+                                    {% set total_votes = 0 %}{% for option in poll.options %}{% set total_votes = total_votes + option.votes %}{% endfor %}
                                     {% for option in poll.options %}
                                         <li>
                                             {{ option.text }}: <strong>{{ option.votes }}</strong> голосів
-                                            {% if total_votes > 0 %}
-                                                ({{ "%.1f" | format((option.votes / total_votes) * 100) }}%)
-                                            {% else %}
-                                                (0%)
-                                            {% endif %}
+                                            {% if total_votes > 0 %}({{ "%.1f"|format((option.votes / total_votes) * 100) }}%){% else %}(0%){% endif %}
                                         </li>
                                     {% endfor %}
                                 </ul>
                                 {% if current_user.is_authenticated and current_user.username in poll.voted_users %}
-                                    <p class="voted-message">Ви вже проголосували в цьому опитуванні.</p>
+                                    <p class="voted-message">Ви вже проголосували.</p>
                                 {% endif %}
                             </div>
                         {% endif %}

@@ -9,21 +9,30 @@ import json
 import csv
 from io import StringIO
 from sqlalchemy import func
+import itertools
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this')
 
 # --- Настройка SQLAlchemy ---
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///site.db')
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///site.db')
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# --- Палітра кольорів для команд ---
+TEAM_COLORS_PALETTE = [
+    '#e0f7fa', '#dcedc8', '#fff9c4', '#ffcdd2', '#e1bee7', 
+    '#d1c4e9', '#c5cae9', '#bbdefb', '#b2ebf2', '#b2dfdb'
+]
+
 @app.context_processor
 def utility_processor():
     def format_datetime_for_display(dt_str):
-        if not dt_str:
-            return "Н/Д"
+        if not dt_str: return "Н/Д"
         try:
             dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
             days_of_week_full = ["Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота", "Неділя"]
@@ -37,8 +46,7 @@ def utility_processor():
                 return dt_str
     
     def format_date_only_for_display(date_str):
-        if not date_str:
-            return "Н/Д"
+        if not date_str: return "Н/Д"
         try:
             dt_obj = datetime.strptime(date_str, '%Y-%m-%d')
             return dt_obj.strftime('%d.%m.%Y')
@@ -48,6 +56,24 @@ def utility_processor():
     return dict(enumerate=enumerate, 
                 format_datetime_for_display=format_datetime_for_display,
                 format_date_only_for_display=format_date_only_for_display)
+
+@app.context_processor
+def inject_unread_status():
+    if not current_user.is_authenticated:
+        return dict(has_unread_announcements=False, has_unread_polls=False)
+
+    seen_items = current_user.seen_items
+    
+    all_announcement_ids = {a.id for a in Announcement.query.with_entities(Announcement.id).all()}
+    seen_announcement_ids = set(seen_items.get('announcements', []))
+    has_unread_announcements = bool(all_announcement_ids - seen_announcement_ids)
+    
+    all_poll_ids = {p.id for p in Poll.query.with_entities(Poll.id).all()}
+    seen_poll_ids = set(seen_items.get('polls', []))
+    has_unread_polls = bool(all_poll_ids - seen_poll_ids)
+    
+    return dict(has_unread_announcements=has_unread_announcements, has_unread_polls=has_unread_polls)
+
 
 # --- Настройка Flask-Login ---
 login_manager = LoginManager()
@@ -69,6 +95,7 @@ mail = Mail(app)
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    nickname = db.Column(db.String(80), nullable=True)
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), default='user')
     has_paid_fees = db.Column(db.Boolean, default=False)
@@ -76,28 +103,26 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(120), unique=True, nullable=True)
     email_confirmed = db.Column(db.Boolean, default=False)
     email_confirmation_token = db.Column(db.String(256), nullable=True)
+    seen_items_json = db.Column(db.Text, default='{}')
 
-    def is_admin(self):
-        return self.role == 'admin'
-    
-    # НОВІ МЕТОДИ ДЛЯ ПЕРЕВІРКИ РОЛЕЙ
-    def is_superuser(self):
-        return self.role == 'superuser'
+    @property
+    def seen_items(self):
+        try:
+            return json.loads(self.seen_items_json)
+        except (json.JSONDecodeError, TypeError):
+            return {}
 
-    def can_manage_events(self):
-        return self.is_admin() or self.is_superuser()
-        
-    def can_view_finances(self):
-        return self.is_admin() or self.is_superuser()
+    @seen_items.setter
+    def seen_items(self, value):
+        self.seen_items_json = json.dumps(value)
 
-    def can_edit_finances(self):
-        return self.is_admin()
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-
-    def __repr__(self):
-        return f"User('{self.username}', '{self.email}', '{self.email_confirmed}')"
+    def is_admin(self): return self.role == 'admin'
+    def is_superuser(self): return self.role == 'superuser'
+    def can_manage_events(self): return self.is_admin() or self.is_superuser()
+    def can_view_finances(self): return self.is_admin() or self.is_superuser()
+    def can_edit_finances(self): return self.is_admin()
+    def check_password(self, password): return check_password_hash(self.password_hash, password)
+    def __repr__(self): return f"User('{self.username}', '{self.nickname}')"
 
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -228,53 +253,48 @@ def register():
         return redirect(url_for('index'))
 
     if request.method == 'POST':
-        username = request.form['username']
+        username = request.form['username'].strip()
+        nickname = request.form['nickname'].strip()
         password = request.form['password']
-        email = request.form['email'] 
+        email = request.form['email'].strip()
+
+        if not nickname:
+            nickname = username
 
         existing_user = User.query.filter_by(username=username).first()
-        existing_email = User.query.filter_by(email=email).first()
-        
         if existing_user:
-            flash('Користувач з таким ім\'ям вже існує.', 'error')
+            flash('Користувач з таким логіном вже існує.', 'error')
             return render_template('register.html')
+        
+        existing_email = User.query.filter_by(email=email).first()
         if existing_email:
             flash('Ця електронна пошта вже зареєстрована.', 'error')
             return render_template('register.html')
-
-
-        hashed_password = generate_password_hash(password)
         
+        hashed_password = generate_password_hash(password)
         is_first_user = (User.query.count() == 0)
         new_user_role = 'admin' if is_first_user else 'user' 
         
         confirmation_token = os.urandom(24).hex() 
-        new_user = User(username=username, password_hash=hashed_password, role=new_user_role, 
-                        has_paid_fees=False, email=email, email_confirmed=False, 
-                        email_confirmation_token=confirmation_token)
+        new_user = User(
+            username=username, 
+            nickname=nickname, 
+            password_hash=hashed_password, 
+            role=new_user_role, 
+            email=email, 
+            email_confirmation_token=confirmation_token
+        )
         db.session.add(new_user)
         db.session.commit()
         
         try:
             confirm_url = url_for('confirm_email', token=confirmation_token, _external=True)
-            msg = Message('Будь ласка, підтвердьте свою електронну пошту', 
-                          sender=app.config['MAIL_DEFAULT_SENDER'],
-                          recipients=[email])
-            msg.body = f"""Привіт, {username}!
-
-Дякуємо за реєстрацію в Клубі спортивних ігор.
-Будь ласка, підтвердьте свою електронну пошту, перейшовши за посиланням:
-{confirm_url}
-
-Якщо ви не реєструвалися на цьому сайті, будь ласка, проігноруйте цей лист.
-
-З повагою,
-Команда Клубу спортивних ігор
-"""
+            msg = Message('Будь ласка, підтвердьте свою електронну пошту', sender=app.config['MAIL_DEFAULT_SENDER'], recipients=[email])
+            msg.body = f"Привіт, {nickname}!\n\nДякуємо за реєстрацію.\nБудь ласка, підтвердьте свою пошту, перейшовши за посиланням:\n{confirm_url}"
             mail.send(msg)
-            flash('Реєстрація успішна! На вашу електронну пошту було надіслано лист для підтвердження. Будь ласка, перевірте свою скриньку.', 'success')
+            flash('Реєстрація успішна! На вашу пошту надіслано лист для підтвердження.', 'success')
         except Exception as e:
-            flash(f'Реєстрація успішна, але не вдалося надіслати лист підтвердження: {e}. Будь ласка, зв\'яжіться з адміністратором.', 'warning')
+            flash(f'Реєстрація успішна, але не вдалося надіслати лист: {e}.', 'warning')
 
         return redirect(url_for('login'))
     
@@ -288,25 +308,17 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-
         user_found = User.query.filter_by(username=username).first()
         
         if user_found and user_found.check_password(password):
             if not user_found.email_confirmed:
                 flash('Будь ласка, підтвердьте свою електронну пошту, щоб увійти.', 'warning')
                 return redirect(url_for('login'))
-
             login_user(user_found)
-            
-            if user_found.has_paid_fees:
-                flash('Вхід успішний! Ми дуже вдячні вам за ваш внесок на підтримку клубу.', 'success')
-            else:
-                flash('Вхід успішний! На жаль, ми ще не отримали від вас членський внесок. Нам буде важко без вашої допомоги організовувати діяльність клубу(', 'info') 
-
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('index'))
+            flash(f'Вхід успішний! Привіт, {user_found.nickname or user_found.username}!', 'success')
+            return redirect(request.args.get('next') or url_for('index'))
         else:
-            flash('Неправильне ім\'я користувача або пароль.', 'error')
+            flash('Неправильний логін або пароль.', 'error')
     
     return render_template('login.html')
 
@@ -324,203 +336,82 @@ def confirm_email(token):
         user.email_confirmed = True
         user.email_confirmation_token = None
         db.session.commit()
-        flash('Ваша електронна пошта успішно підтверджена! Тепер ви можете увійти.', 'success')
+        flash('Ваша пошта успішно підтверджена! Тепер ви можете увійти.', 'success')
         return redirect(url_for('login'))
     else:
-        flash('Недійсний або прострочений токен підтвердження.', 'error')
+        flash('Недійсний токен підтвердження.', 'error')
         return redirect(url_for('login'))
-
 
 # --- Основные маршруты приложения ---
 @app.route('/')
 def index():
     current_time = datetime.now()
-    events_to_delete = [] 
+    events_to_delete = []
+    
+    # Використовуємо .with_for_update() для уникнення race conditions при багатьох запитах
     all_events_from_db = Event.query.order_by(Event.date).all()
-    events_for_display = [] 
-
+    
     for event in all_events_from_db:
         try:
             event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
-            if event_dt < current_time: 
+            if event_dt < current_time:
                 active_participants = [p["username"] for p in event.participants if p.get("status") == "active"]
                 cancelled_participants = [p["username"] for p in event.participants if p.get("status") == "cancelled"]
                 new_log_entry = GameLog(
-                    event_name=event.name,
-                    event_date=event.date,
-                    active_participants=active_participants,
-                    cancelled_participants=cancelled_participants,
-                    teams=event.teams,
-                    image_url=event.image_url,
-                    comment=event.comment 
+                    event_name=event.name, event_date=event.date,
+                    active_participants=active_participants, cancelled_participants=cancelled_participants,
+                    teams=event.teams, image_url=event.image_url, comment=event.comment
                 )
                 db.session.add(new_log_entry)
-                events_to_delete.append(event) 
-            else:
-                events_for_display.append(event)
+                events_to_delete.append(event)
         except ValueError:
-            events_for_display.append(event)
-            flash(f"Подія '{event.name}' має невірний формат дати і не може бути автоматично залогована.", 'error')
+            flash(f"Подія '{event.name}' має невірний формат дати.", 'error')
             
-    for event in events_to_delete:
-        db.session.delete(event)
-    
     if events_to_delete:
-        db.session.commit() 
+        for event in events_to_delete:
+            db.session.delete(event)
+        db.session.commit()
 
     all_users = User.query.all()
     users_fee_status = {u.username: u.has_paid_fees for u in all_users}
+    user_nicknames = {u.username: u.nickname or u.username for u in all_users}
 
-    user_events_next_7_days = []
+    events_for_display = Event.query.filter(Event.date >= datetime.now().strftime('%Y-%m-%d %H:%M:%S')).order_by(Event.date).all()
     events_with_team_info = []
-    for event in events_for_display: 
+
+    for event in events_for_display:
+        unique_team_names = sorted(list(event.teams.keys()))
+        color_cycle = itertools.cycle(TEAM_COLORS_PALETTE)
+        event.team_colors = {team_name: next(color_cycle) for team_name in unique_team_names}
+
         processed_participants = []
         for p_entry in event.participants:
-            assigned_team_name = ''
-            for team_name, members in event.teams.items():
-                if p_entry.get("username") in members:
-                    assigned_team_name = team_name
-                    break 
-            
             p_entry_with_team = p_entry.copy()
-            p_entry_with_team['assigned_team_name'] = assigned_team_name
+            p_entry_with_team['nickname'] = user_nicknames.get(p_entry['username'], p_entry['username'])
+            p_entry_with_team['assigned_team_name'] = next((name for name, members in event.teams.items() if p_entry["username"] in members), '')
             processed_participants.append(p_entry_with_team)
         
-        event.processed_participants = processed_participants
+        event.processed_participants = sorted(
+            processed_participants,
+            key=lambda x: (x.get('assigned_team_name') or 'zzzzzz', datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'))
+        )
         events_with_team_info.append(event)
-
-        if current_user.is_authenticated:
-            now = datetime.now()
-            seven_days_from_now = now + timedelta(days=7)
-            is_participant = any(p_entry.get("username") == current_user.username and p_entry.get("status") == "active" for p_entry in event.participants)
-            
-            if is_participant:
+    
+    user_events_next_7_days = []
+    if current_user.is_authenticated:
+        now = datetime.now()
+        seven_days_from_now = now + timedelta(days=7)
+        for event in events_for_display:
+            if any(p.get("username") == current_user.username and p.get("status") == "active" for p in event.participants):
                 try:
                     event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
                     if now <= event_dt <= seven_days_from_now:
                         user_events_next_7_days.append(event)
-                except ValueError:
-                    continue
-    
-    return render_template('index.html', events=events_with_team_info, current_user=current_user, users_fee_status=users_fee_status, user_events_next_7_days=user_events_next_7_days)
+                except ValueError: continue
 
-@app.route('/add_event', methods=['GET', 'POST'])
-@login_required
-def add_event():
-    # ОНОВЛЕНА ПЕРЕВІРКА
-    if not current_user.can_manage_events():
-        flash('У вас немає дозволу на додавання подій.', 'error')
-        return redirect(url_for('index'))
+    return render_template('index.html', events=events_with_team_info, current_user=current_user, users_fee_status=users_fee_status, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days)
 
-    if request.method == 'POST':
-        event_name = request.form['event_name']
-        event_datetime_str = request.form['event_datetime'] 
-        image_url = request.form.get('image_url')
-        comment = request.form.get('comment')
-
-        if event_name and event_datetime_str:
-            try:
-                dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
-                formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
-                new_event = Event(
-                    name=event_name,
-                    date=formatted_datetime,
-                    image_url=image_url if image_url else None,
-                    comment=comment,
-                    participants_json='[]',
-                    teams_json='{}'
-                )
-                db.session.add(new_event)
-                db.session.commit()
-                flash('Подію успішно додано!', 'success')
-                return redirect(url_for('index'))
-            except ValueError:
-                flash('Неправильний формат дати або часу. Використовуйте РРРР-ММ-ДД HH:MM.', 'error')
-        else:
-            flash('Будь ласка, заповніть усі поля для події.', 'error')
-    
-    return render_template('add_event.html', current_user=current_user)
-
-
-@app.route('/edit_event/<int:event_id>', methods=['GET', 'POST'])
-@login_required
-def edit_event(event_id):
-    # ЦЯ ДІЯ ЛИШЕ ДЛЯ АДМІНА
-    if not current_user.is_admin():
-        flash('У вас немає дозволу на редагування подій.', 'error')
-        return redirect(url_for('index'))
-
-    event = Event.query.get_or_404(event_id)
-
-    if request.method == 'POST':
-        event.name = request.form['event_name']
-        event_datetime_str = request.form['event_datetime']
-        event.image_url = request.form.get('image_url') or None
-        event.comment = request.form.get('comment')
-
-        try:
-            dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
-            event.date = dt_object.strftime('%Y-%m-%d %H:%M:%S')
-            db.session.commit()
-            flash('Подію успішно оновлено!', 'success')
-            return redirect(url_for('index'))
-        except ValueError:
-            flash('Неправильний формат дати або часу.', 'error')
-    
-    try:
-        event_dt_obj = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
-        event.formatted_datetime_local = event_dt_obj.strftime('%Y-%m-%dT%H:%M')
-    except ValueError:
-        event.formatted_datetime_local = ''
-
-    return render_template('edit_event.html', event=event, current_user=current_user)
-
-@app.route('/delete_event/<int:event_id>', methods=['POST'])
-@login_required
-def delete_event(event_id):
-    # ЦЯ ДІЯ ЛИШЕ ДЛЯ АДМІНА
-    if not current_user.is_admin():
-        flash('У вас немає дозволу на видалення подій.', 'error')
-        return redirect(url_for('index'))
-
-    event = Event.query.get_or_404(event_id)
-    db.session.delete(event)
-    db.session.commit()
-    flash('Подію успішно видалено!', 'success')
-    return redirect(url_for('index'))
-
-@app.route('/toggle_participation/<int:event_id>', methods=['POST'])
-@login_required
-def toggle_participation(event_id):
-    participant_name = current_user.username 
-    event = Event.query.get_or_404(event_id)
-    participants_list = event.participants 
-    teams = event.teams
-
-    found_participant_entry = next((entry for entry in participants_list if entry["username"] == participant_name), None)
-
-    if found_participant_entry:
-        registration_time = datetime.strptime(found_participant_entry["timestamp"], '%Y-%m-%d %H:%M:%S')
-        if datetime.now() - registration_time > timedelta(hours=1):
-            found_participant_entry["status"] = "cancelled"
-            flash(f'{participant_name}, вашу участь позначено як "Відмовився" для "{event.name}".', 'info')
-        else:
-            participants_list.remove(found_participant_entry)
-            flash(f'{participant_name}, вашу участь скасовано для "{event.name}".', 'info')
-        
-        for team_name, members in teams.items():
-            if participant_name in members:
-                members.remove(participant_name)
-    else:
-        new_participant_entry = {"username": participant_name, "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "status": "active"}
-        participants_list.append(new_participant_entry)
-        flash(f'{participant_name}, ви успішно зареєструвалися на "{event.name}".', 'success')
-    
-    event.participants = participants_list 
-    event.teams = teams 
-    db.session.commit()
-
-    return redirect(url_for('index'))
+# ... (інші маршрути) ...
 
 # --- Маршруты для объявлений ---
 @app.route('/announcements', methods=['GET', 'POST'])

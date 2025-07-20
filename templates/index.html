@@ -8,13 +8,9 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <style>
         .event-comment {
-            background-color: #fffbe6;
-            border-left: 4px solid #ffc107;
-            padding: 10px 15px;
-            margin-top: 15px;
-            border-radius: 4px;
-            font-style: italic;
-            color: #5d4c15;
+            background-color: #fffbe6; border-left: 4px solid #ffc107;
+            padding: 10px 15px; margin-top: 15px; border-radius: 4px;
+            font-style: italic; color: #5d4c15;
         }
     </style>
 </head>
@@ -27,51 +23,34 @@
 
         <div class="auth-links">
             {% if current_user.is_authenticated %}
-                <p>Привіт, {{ current_user.username }}! 
-                {% if current_user.is_admin() %}
-                    <span class="admin-label">(Адміністратор)</span>
-                {% elif current_user.is_superuser() %}
-                    <span class="admin-label" style="background-color: #fffbe6; color: #8a6d3b; border-color: #ffeeba;">(Суперюзер)</span>
-                {% endif %}
+                <p>Привіт, {{ current_user.nickname or current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% elif current_user.is_superuser() %}<span class="admin-label" style="background-color: #fffbe6; color: #8a6d3b; border-color: #ffeeba;">(Суперюзер)</span>{% endif %}
                 </p>
                 <a href="{{ url_for('logout') }}">Вийти</a>
             {% else %}
-                <a href="{{ url_for('login') }}">Увійти</a> | 
-                <a href="{{ url_for('register') }}">Зареєструватися</a>
+                <a href="{{ url_for('login') }}">Увійти</a> | <a href="{{ url_for('register') }}">Зареєструватися</a>
             {% endif %}
         </div>
 
         <nav class="main-nav">
             <a href="{{ url_for('index') }}">Події</a>
-            <a href="{{ url_for('announcements') }}">Оголошення</a>
-            <a href="{{ url_for('polls') }}">Опитування</a>
+            <a href="{{ url_for('announcements') }}">Оголошення {% if has_unread_announcements %}<span class="new-indicator"></span>{% endif %}</a>
+            <a href="{{ url_for('polls') }}">Опитування {% if has_unread_polls %}<span class="new-indicator"></span>{% endif %}</a>
             
             {% if current_user.is_authenticated and current_user.can_manage_events() %}
-                <div class="dropdown">
-                    <button class="dropbtn admin-action">Адміністрування ▼</button>
-                    <div class="dropdown-content">
-                        {% if current_user.can_manage_events() %}
-                            <a href="{{ url_for('add_event') }}">Додати подію</a>
-                        {% endif %}
-                        {% if current_user.can_view_finances() %}
-                            <a href="{{ url_for('finances') }}">Керування фінансами</a>
-                        {% endif %}
-                        {% if current_user.is_admin() %}
-                            <a href="{{ url_for('game_log') }}">Журнал подій</a>
-                        {% endif %}
-                    </div>
+            <div class="dropdown">
+                <button class="dropbtn admin-action">Адміністрування ▼</button>
+                <div class="dropdown-content">
+                    {% if current_user.can_manage_events() %}<a href="{{ url_for('add_event') }}">Додати подію</a>{% endif %}
+                    {% if current_user.can_view_finances() %}<a href="{{ url_for('finances') }}">Керування фінансами</a>{% endif %}
+                    {% if current_user.is_admin() %}<a href="{{ url_for('game_log') }}">Журнал подій</a>{% endif %}
                 </div>
+            </div>
             {% endif %}
         </nav>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <ul class="flashes">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-            </ul>
-          {% endif %}
+          {% if messages %}<ul class="flashes">{% for category, message in messages %}<li class="{{ category }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
         {% endwith %}
 
         {% if current_user.is_authenticated and user_events_next_7_days %}
@@ -79,63 +58,41 @@
                 <h2>Ваші події на наступні 7 днів</h2>
                 <ul>
                     {% for event in user_events_next_7_days %}
-                        <li>
-                            <strong>{{ event.name }}</strong> <span>( {{ format_datetime_for_display(event.date) }} )</span>
-                        </li>
+                        <li><strong>{{ event.name }}</strong> <span>( {{ format_datetime_for_display(event.date) }} )</span></li>
                     {% endfor %}
                 </ul>
             </div>
-        {% elif current_user.is_authenticated %}
-            <div class="personal-calendar-section info-message-box">
-                <p>У вас немає запланованих подій на наступні 7 днів.</p>
-            </div>
         {% endif %}
-
 
         <div class="events-list">
             <h2>Майбутні події</h2>
             {% if events %}
                 {% for event in events %}
                     <div class="event-card">
-                        {% if event.image_url %}
-                            <img src="{{ event.image_url }}" alt="{{ event.name }}" class="event-image">
-                        {% endif %}
+                        {% if event.image_url %}<img src="{{ event.image_url }}" alt="{{ event.name }}" class="event-image">{% endif %}
                         <h3>{{ event.name }} - {{ format_datetime_for_display(event.date) }}</h3>
                         
-                        {% if event.comment %}
-                            <div class="event-comment">
-                                <p><strong>Інформація:</strong> {{ event.comment }}</p>
-                            </div>
-                        {% endif %}
+                        {% if event.comment %}<div class="event-comment"><p><strong>Інформація:</strong> {{ event.comment }}</p></div>{% endif %}
 
-                        {% set active_participants_count = 0 %}
-                        {% for p_entry in event.processed_participants %}
-                            {% if p_entry.status == 'active' %}
-                                {% set active_participants_count = active_participants_count + 1 %}
-                            {% endif %}
-                        {% endfor %}
-                        <p>Учасників: <strong>{{ active_participants_count }}</strong></p>
+                        <p>Учасників: <strong>{{ event.processed_participants | selectattr('status', 'equalto', 'active') | list | length }}</strong></p>
                         
                         <h4>Список учасників:</h4>
                         <ul>
                             {% for p_entry in event.processed_participants %}
                                 <li>
                                     <span class="participant-name-wrapper">
-                                        {{ p_entry.username }} 
-                                        {% if users_fee_status[p_entry.username] is defined and users_fee_status[p_entry.username] %}
-                                            <span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>
-                                        {% endif %}
+                                        {{ p_entry.nickname }} 
+                                        {% if users_fee_status[p_entry.username] %}<span class="fee-paid-badge" title="Внески сплачено">&#10003;</span>{% endif %}
                                     </span>
                                     
                                     {% if p_entry.assigned_team_name %}
-                                        <span class="team-name-badge">{{ p_entry.assigned_team_name }} 😉</span>
+                                        <span class="team-name-badge" style="background-color: {{ event.team_colors.get(p_entry.assigned_team_name, '#e9ecef') }};">
+                                            {{ p_entry.assigned_team_name }} 😉
+                                        </span>
                                     {% endif %}
 
                                     <span class="participation-info">
-                                        (Запис: {{ format_datetime_for_display(p_entry.timestamp) }}
-                                        {% if p_entry.status == 'cancelled' %}
-                                            <span class="cancelled-badge">Відмовився</span>
-                                        {% endif %})
+                                        (Запис: {{ format_datetime_for_display(p_entry.timestamp) }}{% if p_entry.status == 'cancelled' %}<span class="cancelled-badge">Відмовився</span>{% endif %})
                                     </span>
                                 </li>
                             {% else %}
@@ -146,18 +103,9 @@
                         {% if current_user.is_authenticated %}
                             <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST">
                                 <button type="submit">
-                                    {% set user_is_active_participant = false %}
-                                    {% for p_entry in event.participants %}
-                                        {% if p_entry.username == current_user.username and p_entry.status == 'active' %}
-                                            {% set user_is_active_participant = true %}
-                                        {% endif %}
-                                    {% endfor %}
-
-                                    {% if user_is_active_participant %}
-                                        Скасувати участь
-                                    {% else %}
-                                        Я зможу
-                                    {% endif %}
+                                    {% set is_participant = false %}
+                                    {% for p in event.participants %}{% if p.username == current_user.username and p.status == 'active' %}{% set is_participant = true %}{% endif %}{% endfor %}
+                                    {% if is_participant %}Скасувати участь{% else %}Я зможу{% endif %}
                                 </button>
                             </form>
                             {% if current_user.can_manage_events() %}
@@ -165,9 +113,7 @@
                                     <a href="{{ url_for('manage_teams', event_id=event.id) }}" class="admin-manage-teams-link small-button">Керувати командами</a>
                                     {% if current_user.is_admin() %}
                                     <a href="{{ url_for('edit_event', event_id=event.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
-                                    <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;">
-                                        <button type="submit" class="admin-delete-event-btn small-button" onclick="return confirm('Ви впевнені, що хочете видалити цю подію? Всі дані, пов’язані з нею (учасники, команди), будуть втрачені.');">Видалити</button>
-                                    </form>
+                                    <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;"><button type="submit" class="admin-delete-event-btn small-button" onclick="return confirm('Ви впевнені?');">Видалити</button></form>
                                     {% endif %}
                                 </div>
                             {% endif %}
@@ -177,7 +123,7 @@
                     </div>
                 {% endfor %}
             {% else %}
-                <p>Наразі немає запланованих подій. Додайте першу подію!</p>
+                <p>Наразі немає запланованих подій.</p>
             {% endif %}
         </div>
     </div>
