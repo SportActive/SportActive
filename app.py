@@ -11,9 +11,13 @@ from io import StringIO
 from sqlalchemy import func
 import itertools
 from itsdangerous import URLSafeTimedSerializer
+import logging
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this')
+
+# Налаштування базового логування
+logging.basicConfig(level=logging.INFO)
 
 # --- Настройка SQLAlchemy ---
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///site.db')
@@ -100,8 +104,8 @@ class User(db.Model, UserMixin):
     nickname = db.Column(db.String(80), nullable=True)
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), default='user')
-    has_paid_fees = db.Column(db.Boolean, default=False)
-    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None)
+    has_paid_fees = db.Column(db.Boolean, default=False) # Це поле більше не використовується для логіки, але залишаємо для сумісності
+    last_fee_payment_date = db.Column(db.String(10), nullable=True, default=None) # Це поле більше не використовується
     email = db.Column(db.String(120), unique=True, nullable=True)
     email_confirmed = db.Column(db.Boolean, default=False)
     email_confirmation_token = db.Column(db.String(256), nullable=True)
@@ -329,9 +333,16 @@ def login():
                 flash('Будь ласка, підтвердьте свою електронну пошту, щоб увійти.', 'warning')
                 return redirect(url_for('login'))
             login_user(user_found)
+            
+            # ЛОГУВАННЯ УСПІШНОГО ВХОДУ
+            app.logger.info(f"Successful login for user: '{username}'")
+            
             flash(f'Вхід успішний! Привіт, {user_found.nickname or user_found.username}!', 'success')
             return redirect(request.args.get('next') or url_for('index'))
         else:
+            # ЛОГУВАННЯ НЕВДАЛОГО ВХОДУ
+            app.logger.warning(f"Failed login attempt for username: '{username}'")
+            
             flash('Неправильний логін або пароль.', 'error')
     
     return render_template('login.html')
@@ -427,15 +438,21 @@ def index():
                 db.session.add(new_log_entry)
                 events_to_delete.append(event)
         except ValueError:
-            flash(f"Подія '{event.name}' має невірний формат дати.", 'error')
+            app.logger.error(f"Could not parse date for event '{event.name}': {event.date}")
             
     if events_to_delete:
         for event in events_to_delete:
             db.session.delete(event)
         db.session.commit()
 
+    # Оновлена логіка перевірки внесків
+    current_month_str = datetime.now().strftime('%Y-%m')
+    paid_transactions = FinancialTransaction.query.filter(
+        FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")
+    ).all()
+    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in paid_transactions if ' від ' in t.description}
+
     all_users = User.query.all()
-    users_fee_status = {u.username: u.has_paid_fees for u in all_users}
     user_nicknames = {u.username: u.nickname or u.username for u in all_users}
 
     events_for_display = Event.query.filter(Event.date >= datetime.now().strftime('%Y-%m-%d %H:%M:%S')).order_by(Event.date).all()
@@ -471,7 +488,7 @@ def index():
                         user_events_next_7_days.append(event)
                 except ValueError: continue
 
-    return render_template('index.html', events=events_with_team_info, current_user=current_user, users_fee_status=users_fee_status, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days)
+    return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month)
 
 @app.route('/add_event', methods=['GET', 'POST'])
 @login_required
@@ -742,10 +759,8 @@ def finances():
             if user and fee_date_str and payment_period and fee_amount_str:
                 try:
                     fee_amount = float(fee_amount_str)
-                    user.has_paid_fees = True
-                    user.last_fee_payment_date = fee_date_str
-                    fee_description = f"Членський внесок ({payment_period}) від {user.nickname or user.username}"
-                    new_fee_transaction = FinancialTransaction(description=fee_description, date=fee_date_str, amount=fee_amount, transaction_type='income', logged_by_admin=current_user.username)
+                    fee_description = f"Членський внесок ({payment_period}) від {user.username}"
+                    new_fee_transaction = FinancialTransaction(description=fee_description, date=fee_date_str, amount=fee_amount, transaction_type='income', logged_by_admin=current_user.nickname or current_user.username)
                     db.session.add(new_fee_transaction)
                     db.session.commit()
                     flash(f'Внесок для {user.nickname or user.username} успішно оновлено.', 'success')
@@ -771,7 +786,12 @@ def finances():
 
     summary = {'start_balance': round(start_balance, 2), 'total_income': round(total_income, 2), 'total_expenses': round(abs(total_expenses), 2), 'end_balance': round(end_balance, 2)}
     users = User.query.order_by(User.username).all()
-    return render_template('finances.html', users=users, transactions=transactions_this_month, summary=summary, period_filter=period, current_user=current_user)
+    
+    current_month_str = datetime.now().strftime('%Y-%m')
+    paid_transactions = FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all()
+    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in paid_transactions if ' від ' in t.description}
+    
+    return render_template('finances.html', users=users, transactions=transactions_this_month, summary=summary, period_filter=period, current_user=current_user, paid_users_for_current_month=paid_users_for_current_month)
 
 @app.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
 @login_required

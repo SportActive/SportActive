@@ -27,48 +27,33 @@
 
         <div class="auth-links">
             {% if current_user.is_authenticated %}
-                <p>Привіт, {{ current_user.username }}! 
-                {% if current_user.is_admin() %}
-                    <span class="admin-label">(Адміністратор)</span>
-                {% elif current_user.is_superuser() %}
-                    <span class="admin-label" style="background-color: #fffbe6; color: #8a6d3b; border-color: #ffeeba;">(Суперюзер)</span>
-                {% endif %}
+                <p>Привіт, {{ current_user.nickname or current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% elif current_user.is_superuser() %}<span class="admin-label" style="background-color: #fffbe6; color: #8a6d3b; border-color: #ffeeba;">(Суперюзер)</span>{% endif %}
                 </p>
                 <a href="{{ url_for('logout') }}">Вийти</a>
             {% else %}
-                <a href="{{ url_for('login') }}">Увійти</a> | 
-                <a href="{{ url_for('register') }}">Зареєструватися</a>
+                <a href="{{ url_for('login') }}">Увійти</a> | <a href="{{ url_for('register') }}">Зареєструватися</a>
             {% endif %}
         </div>
 
         <nav class="main-nav">
             <a href="{{ url_for('index') }}">Події</a>
-            <a href="{{ url_for('announcements') }}">Оголошення</a>
-            <a href="{{ url_for('polls') }}">Опитування</a>
-            {% if current_user.can_manage_events() %}
-                <div class="dropdown">
-                    <button class="dropbtn admin-action">Адміністрування ▼</button>
-                    <div class="dropdown-content">
-                        <a href="{{ url_for('add_event') }}">Додати подію</a>
-                        {% if current_user.can_view_finances() %}
-                        <a href="{{ url_for('finances') }}">Керування фінансами</a>
-                        {% endif %}
-                        {% if current_user.is_admin() %}
-                        <a href="{{ url_for('game_log') }}">Журнал подій</a>
-                        {% endif %}
-                    </div>
+            <a href="{{ url_for('announcements') }}">Оголошення {% if has_unread_announcements %}<span class="new-indicator"></span>{% endif %}</a>
+            <a href="{{ url_for('polls') }}">Опитування {% if has_unread_polls %}<span class="new-indicator"></span>{% endif %}</a>
+            {% if current_user.is_authenticated and (current_user.can_manage_events() or current_user.is_admin()) %}
+            <div class="dropdown">
+                <button class="dropbtn admin-action">Адміністрування ▼</button>
+                <div class="dropdown-content">
+                    {% if current_user.can_manage_events() %}<a href="{{ url_for('add_event') }}">Додати подію</a>{% endif %}
+                    {% if current_user.can_view_finances() %}<a href="{{ url_for('finances') }}">Керування фінансами</a>{% endif %}
+                    {% if current_user.is_admin() %}<a href="{{ url_for('game_log') }}">Журнал подій</a>{% endif %}
                 </div>
+            </div>
             {% endif %}
         </nav>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <ul class="flashes">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-            </ul>
-          {% endif %}
+          {% if messages %}<ul class="flashes">{% for category, message in messages %}<li class="{{ category }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
         {% endwith %}
 
         <div class="log-actions">
@@ -122,19 +107,13 @@
                     <tr>
                         <td>{{ format_date_only_for_display(t.date) }}</td>
                         <td style="text-align: left;">{{ t.description }}</td>
-                        <td>
-                            {% if t.transaction_type == 'income' %}<span class="income">Дохід</span>{% else %}<span class="expense">Витрата</span>{% endif %}
-                        </td>
-                        <td>
-                            <strong class="{{ 'income' if t.transaction_type == 'income' else 'expense' }}">{{ "%.2f"|format(t.amount) }}</strong>
-                        </td>
+                        <td>{% if t.transaction_type == 'income' %}<span class="income">Дохід</span>{% else %}<span class="expense">Витрата</span>{% endif %}</td>
+                        <td><strong class="{{ 'income' if t.transaction_type == 'income' else 'expense' }}">{{ "%.2f"|format(t.amount) }}</strong></td>
                         {% if current_user.can_edit_finances() %}
                         <td>
                             <div class="inline-form" style="justify-content: center;">
                                 <a href="{{ url_for('edit_transaction', transaction_id=t.id) }}" class="small-button" style="background-color: #ffc107; color: black;">Редагувати</a>
-                                <form action="{{ url_for('delete_transaction', transaction_id=t.id) }}" method="POST" style="margin: 0;">
-                                    <button type="submit" class="small-button" style="background-color: #dc3545;" onclick="return confirm('Ви впевнені, що хочете видалити цю транзакцію?');">Видалити</button>
-                                </form>
+                                <form action="{{ url_for('delete_transaction', transaction_id=t.id) }}" method="POST" style="margin: 0;"><button type="submit" class="small-button" style="background-color: #dc3545;" onclick="return confirm('Ви впевнені?');">Видалити</button></form>
                             </div>
                         </td>
                         {% endif %}
@@ -152,10 +131,10 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Ім'я</th>
+                        <th>Логін</th>
+                        <th>Нікнейм</th>
                         <th>Роль</th>
-                        <th>Статус внеску</th>
-                        <th>Остання сплата</th>
+                        <th>Внесок (цей місяць)</th>
                         <th>Оновити внесок</th>
                     </tr>
                 </thead>
@@ -163,6 +142,7 @@
                     {% for user in users %}
                     <tr>
                         <td>{{ user.username }}</td>
+                        <td>{{ user.nickname or user.username }}</td>
                         <td>
                             <form action="{{ url_for('update_user_role', user_id=user.id) }}" method="POST" class="inline-form">
                                 <select name="role" onchange="this.form.submit()">
@@ -173,9 +153,12 @@
                             </form>
                         </td>
                         <td>
-                            {% if user.has_paid_fees %}<span class="fee-paid-status">Сплачено &#10003;</span>{% else %}<span class="fee-unpaid-status">Не сплачено &#10007;</span>{% endif %}
+                            {% if user.username in paid_users_for_current_month %}
+                                <span class="fee-paid-status">Сплачено &#10003;</span>
+                            {% else %}
+                                <span class="fee-unpaid-status">Не сплачено &#10007;</span>
+                            {% endif %}
                         </td>
-                        <td>{{ format_date_only_for_display(user.last_fee_payment_date) }}</td>
                         <td>
                             <form action="{{ url_for('finances', period=period_filter) }}" method="POST" class="inline-form">
                                 <input type="hidden" name="form_type" value="update_user_fee">
