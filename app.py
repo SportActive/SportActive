@@ -170,7 +170,7 @@ class Event(db.Model):
     def __repr__(self):
         return f"Event('{self.name}', '{self.date}')"
 
-# НОВА МОДЕЛЬ: Для зв'язку Event-User (Потрібна для нової логіки статистики)
+# НОВА МОДЕЛЬ: Для зв'язку Event-User
 class EventParticipant(db.Model):
     __tablename__ = 'event_participant'
     id = db.Column(db.Integer, primary_key=True)
@@ -278,6 +278,58 @@ class RemovedParticipantLog(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+# --- Тимчасова функція для міграції старих JSON-даних до ORM-моделі ---
+def migrate_old_participants_to_orm(app):
+    with app.app_context():
+        # Перевірка, чи потрібно запускати міграцію (запобігає повторному запуску)
+        if EventParticipant.query.count() > 0:
+            app.logger.info("ORM-таблиця EventParticipant вже містить дані. Міграція пропущена.")
+            return
+
+        app.logger.info("Запуск міграції старих даних про учасників...")
+        
+        events = Event.query.all()
+        migrated_count = 0
+        
+        for event in events:
+            # Парсимо старий JSON список учасників
+            old_participants_list = event.participants 
+            
+            for p_entry in old_participants_list:
+                username = p_entry.get('username')
+                timestamp_str = p_entry.get('timestamp')
+                status = p_entry.get('status')
+                
+                # Ігноруємо скасованих учасників
+                if status == 'cancelled':
+                    continue
+                
+                user = User.query.filter_by(username=username).first()
+                
+                if user:
+                    # Конвертуємо строку часу в об'єкт datetime
+                    try:
+                        join_date_dt = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        app.logger.error(f"Некоректний формат часу для {username} у події {event.id}. Використано поточний час.")
+                        join_date_dt = datetime.utcnow()
+                        
+                    # Створюємо новий запис в ORM-таблиці
+                    new_participant = EventParticipant(
+                        event_id=event.id,
+                        user_id=user.id,
+                        join_date=join_date_dt
+                    )
+                    db.session.add(new_participant)
+                    migrated_count += 1
+                else:
+                    app.logger.warning(f"Користувач {username} не знайдений для міграції (Event ID: {event.id}).")
+
+        db.session.commit()
+        app.logger.info(f"Міграція завершена. Додано {migrated_count} записів до EventParticipant.")
+# --- КІНЕЦЬ тимчасової функції ---
 
 
 # --- Маршруты для аутентификации ---
@@ -554,7 +606,7 @@ def index():
                         user_events_next_7_days.append(event)
                 except ValueError: continue
 
-    # !!! ПЕРЕДАННЯ EventParticipant У ШАБЛОН ДЛЯ ВИРІШЕННЯ UNDEFINEDERROR !!!
+    # !!! ПЕРЕДАННЯ EventParticipant У ШАБЛОН ТА КОНТРОЛЬ ВІДСТУПІВ !!!
     return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month, EventParticipant=EventParticipant)
 
 @app.route('/add_event', methods=['GET', 'POST'])
@@ -1110,7 +1162,9 @@ def export_finances():
 
 if __name__ == '__main__':
     with app.app_context():
-        # При використанні Alembic db.create_all() може бути закоментовано
-        # db.create_all()
+        # !!! ПІСЛЯ ПЕРШОГО УСПІШНОГО ЗАПУСКУ ЦЕЙ РЯДОК МАЄ БУТИ ВИДАЛЕНИЙ/ЗАКОМЕНТОВАНИЙ !!!
+        # Він потрібен лише для одноразової міграції старих даних.
+       # migrate_old_participants_to_orm(app)
+        # db.create_all() # Використовуйте alembic для міграцій!
         pass
     app.run(debug=True)
