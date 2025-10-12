@@ -550,8 +550,7 @@ def index():
                         user_events_next_7_days.append(event)
                 except ValueError: continue
 
-    return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month)
-
+return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month, EventParticipant=EventParticipant)
 @app.route('/add_event', methods=['GET', 'POST'])
 @login_required
 def add_event():
