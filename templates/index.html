@@ -87,23 +87,27 @@
                                         {% elif p_entry.status == 'removed' %}<span class="cancelled-badge removed-status">Знятий адміном</span>{% endif %}
                                     )</span>
                                 </span>
-                                {% if current_user.is_authenticated and current_user.can_manage_events() and p_entry.user_id != current_user.id %}
+                                
+                                {% if current_user.is_authenticated and current_user.can_manage_events() %}
                                     <span class="participant-actions-group">
                                         {% if p_entry.stats %}
                                             <span class="admin-stats" title="Ігор на цьому тижні / за останні 30 днів">
                                                 Тиждень: <strong>{{ p_entry.stats.weekly_count }}</strong>, 30 днів: <strong>{{ p_entry.stats.monthly_count }}</strong>
                                             </span>
                                         {% endif %}
-                                        <form action="{{ url_for('admin_toggle_participant_status', event_id=event.id, user_id=p_entry.user_id) }}" method="POST" style="display: inline;">
-                                            {% if p_entry.status == 'active' %}
-                                                <button type="submit" class="remove-participant-btn" title="Зняти учасника з гри">Зняти</button>
-                                            {% elif p_entry.status in ['removed', 'refused'] %}
-                                                <button type="submit" class="button join-button small-button" style="background-color: #28a745;" title="Повернути учасника в гру">Повернути</button>
-                                            {% endif %}
-                                        </form>
+
+                                        {% if p_entry.user_id != current_user.id %}
+                                            <form action="{{ url_for('admin_toggle_participant_status', event_id=event.id, user_id=p_entry.user_id) }}" method="POST" style="display: inline;">
+                                                {% if p_entry.status == 'active' %}
+                                                    <button type="submit" class="remove-participant-btn" title="Зняти учасника з гри">Зняти</button>
+                                                {% elif p_entry.status in ['removed', 'refused'] %}
+                                                    <button type="submit" class="button join-button small-button" style="background-color: #28a745;" title="Повернути учасника в гру">Повернути</button>
+                                                {% endif %}
+                                            </form>
+                                        {% endif %}
                                     </span>
                                 {% endif %}
-                            </li>
+                                </li>
                         {% else %}
                             <li>Поки що ніхто не зареєструвався.</li>
                         {% endfor %}
@@ -143,8 +147,7 @@
         </div>
     </div>
     <script>
-        // JavaScript больше не нужен для этой функциональности,
-        // так как все действия обрабатываются через стандартные формы.
+        // JavaScript больше не нужен для этой функциональности.
     </script>
 </body>
 </html>
