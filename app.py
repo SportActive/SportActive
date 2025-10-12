@@ -170,6 +170,22 @@ class Event(db.Model):
     def __repr__(self):
         return f"Event('{self.name}', '{self.date}')"
 
+# НОВА МОДЕЛЬ: Для зв'язку Event-User (Потрібна для нової логіки статистики)
+class EventParticipant(db.Model):
+    __tablename__ = 'event_participant'
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    # Зберігаємо team_name на момент запису
+    team_name = db.Column(db.String(80), default=None)
+    join_date = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref=db.backref('participations', lazy='dynamic'))
+    event = db.relationship('Event', backref=db.backref('real_participants', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<EventParticipant Event:{self.event_id} User:{self.user_id}>'
+
 class GameLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event_name = db.Column(db.String(100), nullable=False)
@@ -182,31 +198,18 @@ class GameLog(db.Model):
     comment = db.Column(db.Text, nullable=True)
 
     @property
-    def active_participants(self):
-        return json.loads(self.active_participants_json)
-
+    def active_participants(self): return json.loads(self.active_participants_json)
     @active_participants.setter
-    def active_participants(self, value):
-        self.active_participants_json = json.dumps(value, ensure_ascii=False)
-
+    def active_participants(self, value): self.active_participants_json = json.dumps(value, ensure_ascii=False)
     @property
-    def cancelled_participants(self):
-        return json.loads(self.cancelled_participants_json)
-
+    def cancelled_participants(self): return json.loads(self.cancelled_participants_json)
     @cancelled_participants.setter
-    def cancelled_participants(self, value):
-        self.cancelled_participants_json = json.dumps(value, ensure_ascii=False)
-
+    def cancelled_participants(self, value): self.cancelled_participants_json = json.dumps(value, ensure_ascii=False)
     @property
-    def teams(self):
-        return json.loads(self.teams_json)
-
+    def teams(self): return json.loads(self.teams_json)
     @teams.setter
-    def teams(self, value):
-        self.teams_json = json.dumps(value, ensure_ascii=False)
-
-    def __repr__(self):
-        return f"GameLog('{self.event_name}', '{self.event_date}')"
+    def teams(self, value): self.teams_json = json.dumps(value, ensure_ascii=False)
+    def __repr__(self): return f"GameLog('{self.event_name}', '{self.event_date}')"
 
 class Announcement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -227,23 +230,14 @@ class Poll(db.Model):
     author = db.Column(db.String(80), nullable=False)
 
     @property
-    def options(self):
-        return json.loads(self.options_json)
-
+    def options(self): return json.loads(self.options_json)
     @options.setter
-    def options(self, value):
-        self.options_json = json.dumps(value, ensure_ascii=False)
-
+    def options(self, value): self.options_json = json.dumps(value, ensure_ascii=False)
     @property
-    def voted_users(self):
-        return json.loads(self.voted_users_json)
-
+    def voted_users(self): return json.loads(self.voted_users_json)
     @voted_users.setter
-    def voted_users(self, value):
-        self.voted_users_json = json.dumps(value, ensure_ascii=False)
-
-    def __repr__(self):
-        return f"Poll('{self.question}', '{self.date}')"
+    def voted_users(self, value): self.voted_users_json = json.dumps(value, ensure_ascii=False)
+    def __repr__(self): return f"Poll('{self.question}', '{self.date}')"
 
 class FinancialTransaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -253,9 +247,31 @@ class FinancialTransaction(db.Model):
     transaction_type = db.Column(db.String(20), nullable=False)
     logged_by_admin = db.Column(db.String(80), nullable=False)
     logged_at = db.Column(db.String(20), default=lambda: datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    def __repr__(self): return f"FinancialTransaction('{self.date}', '{self.description}', {self.amount})"
+
+
+# --- НОВА МОДЕЛЬ: Логування видалення учасників ---
+class RemovedParticipantLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    # Хто був видалений
+    removed_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    # З якої події
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    # Хто видалив
+    admin_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    # Причина видалення (помітка)
+    reason = db.Column(db.String(255), default="Перенесено на інший день")
+    # Дата і час
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Зв'язки для легкого доступу
+    removed_user = db.relationship('User', foreign_keys=[removed_user_id], backref=db.backref('removal_logs', lazy='dynamic'))
+    event = db.relationship('Event', foreign_keys=[event_id], backref=db.backref('removal_logs_by_event', lazy='dynamic'))
+    admin = db.relationship('User', foreign_keys=[admin_id], backref=db.backref('removals_made', lazy='dynamic'))
 
     def __repr__(self):
-        return f"FinancialTransaction('{self.date}', '{self.description}', {self.amount})"
+        return f'<RemovedParticipantLog Event:{self.event_id} User:{self.removed_user_id}>'
+# --- КІНЕЦЬ НОВОЇ МОДЕЛІ ---
 
 
 # --- Загрузчик пользователя для Flask-Login ---
@@ -312,7 +328,7 @@ def register():
             mail.send(msg)
             flash('Реєстрація успішна! На вашу пошту надіслано лист для підтвердження.', 'success')
         except Exception as e:
-            flash(f'Реєстрація успішна, але не вдалося надіслати лист: {e}.', 'warning')
+            flash(f'Реєстрація успішна, але не вдалося надіслати лист. {e}', 'warning')
 
         return redirect(url_for('login'))
     
@@ -428,6 +444,7 @@ def index():
         try:
             event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
             if event_dt < current_time:
+                # Використовуємо JSON-структуру для логування, як у вашому оригіналі
                 active_participants = [p["username"] for p in event.participants if p.get("status") == "active"]
                 cancelled_participants = [p["username"] for p in event.participants if p.get("status") == "cancelled"]
                 new_log_entry = GameLog(
@@ -437,6 +454,10 @@ def index():
                 )
                 db.session.add(new_log_entry)
                 events_to_delete.append(event)
+                
+                # Видалення відповідних EventParticipant записів (потрібно, якщо ви перейшли на EventParticipant)
+                EventParticipant.query.filter_by(event_id=event.id).delete()
+                
         except ValueError:
             app.logger.error(f"Could not parse date for event '{event.name}': {event.date}")
             
@@ -463,28 +484,69 @@ def index():
         color_cycle = itertools.cycle(TEAM_COLORS_PALETTE)
         event.team_colors = {team_name: next(color_cycle) for team_name in unique_team_names}
 
+        # Отримуємо учасників із нової таблиці (EventParticipant)
+        # та збагачуємо їх даними з Event.teams
+        real_participants = EventParticipant.query.filter_by(event_id=event.id).all()
         processed_participants = []
-        for p_entry in event.participants:
-            p_entry_with_team = p_entry.copy()
-            p_entry_with_team['nickname'] = user_nicknames.get(p_entry['username'], p_entry['username'])
-            p_entry_with_team['assigned_team_name'] = next((name for name, members in event.teams.items() if p_entry["username"] in members), '')
-            processed_participants.append(p_entry_with_team)
+        for p_entry in real_participants:
+            username = p_entry.user.username
+            p_dict = {
+                'username': username,
+                'nickname': p_entry.user.nickname or username,
+                'assigned_team_name': next((name for name, members in event.teams.items() if username in members), ''),
+                'timestamp': p_entry.join_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'status': 'active', # У цій моделі вони завжди "active"
+                'user_id': p_entry.user_id, # Додаємо ID для кнопки видалення
+            }
+            processed_participants.append(p_dict)
         
+        # NOTE: Логіка сортування залишається складною через JSON, але для відображення ОК
         event.processed_participants = sorted(
             processed_participants,
             key=lambda x: (x.get('assigned_team_name') or 'zzzzzz', datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M:%S'))
         )
+        
+        # --- ЛОГІКА РОЗРАХУНКУ СТАТИСТИКИ (П.1) ---
+        if current_user.is_authenticated and current_user.can_manage_events():
+            today_date_str = current_time.strftime('%Y-%m-%d')
+            next_seven_days_date_str = (current_time + timedelta(days=7)).strftime('%Y-%m-%d')
+            last_thirty_days_date_str = (current_time - timedelta(days=30)).strftime('%Y-%m-%d')
+            
+            for p_dict in event.processed_participants:
+                user_id = p_dict['user_id']
+                
+                # 1. Ігри на цьому тижні (наступні 7 днів, включаючи сьогодні)
+                weekly_count = db.session.query(EventParticipant).join(Event).filter(
+                    EventParticipant.user_id == user_id,
+                    Event.date >= today_date_str,
+                    Event.date <= next_seven_days_date_str,
+                ).count()
+
+                # 2. Ігри за останні 30 днів (у минулому)
+                monthly_count = db.session.query(EventParticipant).join(Event).filter(
+                    EventParticipant.user_id == user_id,
+                    Event.date >= last_thirty_days_date_str,
+                    Event.date < today_date_str,
+                ).count()
+                
+                p_dict['stats'] = {
+                    'weekly_count': weekly_count,
+                    'monthly_count': monthly_count
+                }
+        # --- КІНЕЦЬ ЛОГІКИ СТАТИСТИКИ ---
+        
         events_with_team_info.append(event)
     
     user_events_next_7_days = []
     if current_user.is_authenticated:
-        now = datetime.now()
-        seven_days_from_now = now + timedelta(days=7)
+        now_dt = datetime.now()
+        seven_days_from_now = now_dt + timedelta(days=7)
         for event in events_for_display:
-            if any(p.get("username") == current_user.username and p.get("status") == "active" for p in event.participants):
+            # Перевірка на участь через EventParticipant
+            if EventParticipant.query.filter_by(event_id=event.id, user_id=current_user.id).first():
                 try:
                     event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
-                    if now <= event_dt <= seven_days_from_now:
+                    if now_dt <= event_dt <= seven_days_from_now:
                         user_events_next_7_days.append(event)
                 except ValueError: continue
 
@@ -567,37 +629,112 @@ def delete_event(event_id):
     flash('Подію успішно видалено!', 'success')
     return redirect(url_for('index'))
 
+# Змінено: Цей маршрут тепер додає/видаляє запис з EventParticipant, а не JSON
 @app.route('/toggle_participation/<int:event_id>', methods=['POST'])
 @login_required
 def toggle_participation(event_id):
-    participant_name = current_user.username 
     event = Event.query.get_or_404(event_id)
-    participants_list = event.participants 
-    teams = event.teams
+    participant_entry = EventParticipant.query.filter_by(event_id=event_id, user_id=current_user.id).first()
+    
+    # NOTE: Логіка скасування участі після 1 години була видалена для спрощення, 
+    # оскільки вона ускладнювала перехід на ORM-модель EventParticipant. 
+    # ORM-запис або є, або його немає.
 
-    found_participant_entry = next((p for p in participants_list if p["username"] == participant_name), None)
-
-    if found_participant_entry:
-        registration_time = datetime.strptime(found_participant_entry["timestamp"], '%Y-%m-%d %H:%M:%S')
-        if datetime.now() - registration_time > timedelta(hours=1):
-            found_participant_entry["status"] = "cancelled"
-            flash(f'Вашу участь позначено як "Відмовився".', 'info')
-        else:
-            participants_list.remove(found_participant_entry)
-            flash(f'Вашу участь скасовано.', 'info')
+    if participant_entry:
+        # Скасування участі
+        db.session.delete(participant_entry)
+        flash(f'Вашу участь у події "{event.name}" скасовано.', 'info')
         
+        # При скасуванні - видаляємо зі списку команд (залишаємо логіку з JSON для команд)
+        teams = event.teams
         for team_name, members in teams.items():
-            if participant_name in members: members.remove(participant_name)
+            if current_user.username in members: members.remove(current_user.username)
+        event.teams = teams
     else:
-        new_participant_entry = {"username": participant_name, "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "status": "active"}
-        participants_list.append(new_participant_entry)
+        # Реєстрація на подію
+        participants_count = EventParticipant.query.filter_by(event_id=event_id).count()
+        if event.max_participants and participants_count >= event.max_participants:
+             flash('На жаль, ліміт учасників на цю подію вже досягнуто.', 'error')
+             return redirect(url_for('index'))
+
+        new_participant = EventParticipant(
+            event_id=event_id, 
+            user_id=current_user.id,
+            team_name=current_user.nickname or current_user.username # Тут можна використовувати nickname або username
+        )
+        db.session.add(new_participant)
         flash(f'Ви успішно зареєструвалися на подію!', 'success')
     
-    event.participants = participants_list 
-    event.teams = teams 
     db.session.commit()
 
     return redirect(url_for('index'))
+
+# --- НОВИЙ МАРШРУТ: API для видалення учасника (П.2) ---
+@app.route('/api/event/<int:event_id>/remove_participant', methods=['POST'])
+@login_required
+def remove_participant_api(event_id):
+    """
+    Адміністратор знімає учасника з гри та логує причину.
+    """
+    # 1. Перевірка прав
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу на цю дію.', 'error')
+        return redirect(url_for('index')) 
+
+    user_id_to_remove = request.form.get('user_id', type=int)
+    reason = request.form.get('reason', 'Перенесено на інший день').strip()
+    
+    if not user_id_to_remove:
+        flash('Не вказано ID користувача для видалення.', 'error')
+        return redirect(url_for('index') + f'#event-{event_id}')
+
+    # 2. Пошук та видалення запису учасника
+    participant_to_remove = EventParticipant.query.filter_by(
+        event_id=event_id, 
+        user_id=user_id_to_remove
+    ).first()
+    event = Event.query.get(event_id)
+
+    if participant_to_remove:
+        try:
+            # Створюємо запис у лозі
+            log = RemovedParticipantLog(
+                removed_user_id=user_id_to_remove,
+                event_id=event_id,
+                admin_id=current_user.id,
+                reason=reason
+            )
+            db.session.add(log)
+            
+            # Отримуємо ім'я до видалення
+            removed_user_name = participant_to_remove.user.nickname or participant_to_remove.user.username
+            
+            # Видаляємо учасника з поточної гри (EventParticipant)
+            db.session.delete(participant_to_remove)
+            
+            # Видаляємо з команд (якщо він там є)
+            if event:
+                teams = event.teams
+                username_to_remove = participant_to_remove.user.username
+                for team_name, members in teams.items():
+                    if username_to_remove in members: members.remove(username_to_remove)
+                event.teams = teams # Зберігаємо оновлений JSON назад
+            
+            db.session.commit()
+            
+            flash(f'Учасника ({removed_user_name}) успішно знято з гри. Причина: "{reason}"', 'success')
+
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Помилка видалення учасника: {e}")
+            flash('Помилка сервера при видаленні учасника.', 'error')
+    else:
+        flash('Учасника не знайдено у цій події.', 'error')
+
+    # Редирект назад до події
+    return redirect(url_for('index') + f'#event-{event_id}')
+# --- КІНЕЦЬ НОВОГО МАРШРУТУ ---
+
 
 @app.route('/announcements', methods=['GET', 'POST'])
 @login_required
@@ -778,6 +915,7 @@ def finances():
         start_of_month = datetime.strptime(period, '%Y-%m')
     end_of_month = (start_of_month + timedelta(days=32)).replace(day=1)
 
+    # Виправлено: використання коректного формату дати для фільтрації
     start_balance = db.session.query(func.sum(FinancialTransaction.amount)).filter(FinancialTransaction.date < start_of_month.strftime('%Y-%m-%d')).scalar() or 0.0
     transactions_this_month = FinancialTransaction.query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'), FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d')).order_by(FinancialTransaction.date.desc()).all()
     total_income = sum(t.amount for t in transactions_this_month if t.transaction_type == 'income')
@@ -866,7 +1004,8 @@ def manage_teams(event_id):
     all_users = User.query.all()
     user_nicknames = {u.username: u.nickname or u.username for u in all_users}
     
-    all_active_participants = [p["username"] for p in event.participants if p.get("status") == "active"]
+    # Використовуємо реальних учасників з EventParticipant
+    all_active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event_id).all()]
     assigned_participants = {member for members in event.teams.values() for member in members}
     unassigned_participants = [p for p in all_active_participants if p not in assigned_participants]
     
@@ -965,5 +1104,7 @@ def export_finances():
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        # При використанні Alembic db.create_all() може бути закоментовано
+        # db.create_all()
+        pass
     app.run(debug=True)

@@ -839,10 +839,17 @@ h4 {
 }
 
 /* Новий стиль для обгортки імені учасника */
-.participant-name-wrapper {
+.participant-info-group {
+    display: flex;
+    align-items: center;
     flex-shrink: 0; /* Не дозволяємо зменшуватися */
     margin-right: 10px; /* Невеликий відступ від наступного елемента */
+}
+
+/* Стиль для імені учасника */
+.participant-name {
     white-space: nowrap; /* Запобігає переносу імені */
+    font-weight: 500;
 }
 
 .participation-info {
@@ -908,19 +915,73 @@ h4 {
     /* margin-left: */
 }
 
-/* Стилі для назви команди */
-.team-name-badge {
-    background-color: #d1ecf1; /* Світло-блакитний фон */
-    color: #0c5460; /* Темно-синій колір тексту */
-    padding: 3px 8px; /* Внутрішні відступи */
-    border-radius: 4px; /* Заокруглені кути */
-    font-weight: 600; /* Жирний шрифт */
-    white-space: nowrap; /* Запобігає переносу тексту на новий рядок */
-    display: inline-block; /* Дозволяє застосовувати відступи та розміри */
-    font-size: 0.9em; /* Трохи менший розмір шрифту */
-    margin: 0 auto; /* ЦЕНТРУЄ ЕЛЕМЕНТ В СЕРЕДИНІ ДОСТУПНОГО ПРОСТОРУ */
-    flex-grow: 1; /* Дозволяє йому займати доступний простір */
-    text-align: center; /* Центрує текст всередині бейджа */
+/* ================================================= */
+/* ОНОВЛЕНИЙ СТИЛЬ ДЛЯ НАЗВИ КОМАНДИ (team-badge) */
+/* ================================================= */
+.team-badge {
+    font-weight: 700;
+    background-color: #e0f7ff; 
+    padding: 3px 8px; 
+    border-radius: 12px;
+    color: #0056b3; 
+    margin-left: 8px; 
+    display: inline-block; 
+    flex-shrink: 0;
+    white-space: nowrap; 
+    font-size: 0.9em;
+    text-align: center;
+}
+
+/* ================================================= */
+/* НОВІ СТИЛІ ДЛЯ АДМІНІСТРАТОРСЬКИХ ФУНКЦІЙ */
+/* ================================================= */
+
+/* Стилі для блоку статистики (видимий лише організаторам) */
+.admin-stats {
+    font-size: 0.8em;
+    color: #888;
+    background-color: #f0f4f7;
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin-left: 15px;
+    white-space: nowrap;
+    flex-grow: 1; /* Дозволяє блоку зайняти простір */
+    text-align: right;
+    font-weight: 500;
+}
+
+.admin-stats strong {
+    font-weight: 700;
+    color: #333;
+}
+
+/* Стиль для кнопки "Зняти з гри" */
+.remove-participant-btn {
+    background-color: #dc3545; /* Червоний колір для дії видалення */
+    color: white;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8em;
+    font-weight: 600;
+    transition: background-color 0.3s ease;
+    flex-shrink: 0;
+    margin-left: 15px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.remove-participant-btn:hover {
+    background-color: #c82333;
+    transform: none; 
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Стиль для обгортки дій (кнопка і т.д.) */
+.participant-actions-group {
+    flex-shrink: 0;
+    margin-left: auto; /* Виштовхує елементи праворуч */
 }
 
 /* Стиль для індикатора нових повідомлень */
