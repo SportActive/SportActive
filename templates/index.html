@@ -1,85 +1,260 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Активно-спортивні ми</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <style>
+        .event-comment {
+            background-color: #fffbe6;
+            border-left: 4px solid #ffc107;
+            padding: 10px 15px;
+            margin-top: 15px;
+            border-radius: 4px;
+            font-style: italic;
+            color: #5d4c15;
+        }
 
-{% block title %}Головна сторінка{% endblock %}
+        /* Стилі для рядка учасника */
+        .participant-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            padding: 5px 0;
+            border-bottom: 1px dashed #eee;
+        }
 
-{% block content %}
-
-    {% if current_user.is_authenticated %}
-        <h2>Ваші події на наступні 7 днів</h2>
-        {% endif %}
-
-    <h2>Майбутні події</h2>
-
-    {% for event in events %}
-    <div class="event-card" id="event-{{ event.id }}">
+        .participant-name {
+            font-weight: 600;
+            color: #34495e;
+        }
         
-        <h3>{{ event.title }} - {{ format_datetime_for_display(event.date) }}</h3>
+        .team-badge {
+            font-size: 0.75em;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 10px;
+            font-weight: 700;
+            color: #333; /* Залишаємо темним, щоб було видно на кольоровому фоні */
+        }
         
-        {% if event.max_participants %}
-            <p><strong>Учасників:</strong> {{ event.participants.count() }} / {{ event.max_participants }}</p>
-        {% else %}
-            <p><strong>Учасників:</strong> {{ event.participants.count() }}</p>
-        {% endif %}
+        .cancelled-badge {
+            color: #dc3545;
+            font-weight: 600;
+            margin-left: 5px;
+        }
+
+        .remove-participant-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            margin-left: 10px;
+            transition: background-color 0.2s;
+        }
+
+        .remove-participant-btn:hover {
+            background-color: #c82333;
+        }
+
+        .admin-stats {
+            font-size: 0.8em;
+            color: #6c757d;
+            border: 1px solid #ced4da;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-right: 10px;
+            white-space: nowrap;
+        }
+
+        .participant-info-group {
+            display: flex;
+            align-items: center;
+        }
+
+        .participant-actions-group {
+            display: flex;
+            align-items: center;
+        }
         
-        {% if current_user.is_authenticated %}
-            {% set is_participant = event.participants.filter_by(user_id=current_user.id).first() %}
-            {% if is_participant %}
-                <button class="small-button" disabled style="background-color: #28a745; cursor: default;">Ви записані</button>
-            {% elif event.is_open and (not event.max_participants or event.participants.count() < event.max_participants) %}
-                <a href="{{ url_for('join_event', event_id=event.id) }}" class="small-button">Записатися</a>
+        .fee-paid-badge {
+            color: #28a745;
+            font-weight: 700;
+            margin-left: 5px;
+            font-size: 1.1em;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="main-title">
+            <img src="{{ url_for('static', filename='favicon.png') }}" alt="Логотип" class="main-title-icon">
+            Активно-спортивні ми
+        </h1>
+
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.nickname or current_user.username }}! 
+                {% if current_user.is_admin() %}<span class="badge admin-badge">Адмін</span>{% endif %}
+                {% if current_user.is_superuser() %}<span class="badge superuser-badge">Суперадмін</span>{% endif %}
+                </p>
+                <nav class="user-nav">
+                    {% if current_user.can_view_finances() %}
+                        <a href="{{ url_for('finances') }}" class="nav-link">Фінанси</a>
+                    {% endif %}
+                    <a href="{{ url_for('announcements') }}" class="nav-link {% if has_unread_announcements %}unread{% endif %}">Оголошення</a>
+                    <a href="{{ url_for('polls') }}" class="nav-link {% if has_unread_polls %}unread{% endif %}">Опитування</a>
+                    {% if current_user.can_manage_events() %}
+                        <a href="{{ url_for('game_log') }}" class="nav-link">Журнал подій</a>
+                        <a href="{{ url_for('add_event') }}" class="nav-link primary-nav-link">Додати подію</a>
+                    {% endif %}
+                    <a href="{{ url_for('logout') }}" class="nav-link logout-link">Вийти</a>
+                </nav>
             {% else %}
-                 <button class="small-button" disabled style="background-color: #6c757d; cursor: default;">Місця закінчились</button>
+                <a href="{{ url_for('login') }}" class="nav-link">Увійти</a>
+                <a href="{{ url_for('register') }}" class="nav-link">Реєстрація</a>
             {% endif %}
-        {% else %}
-            <p><a href="{{ url_for('login') }}">Увійдіть</a>, щоб записатися.</p>
-        {% endif %}
+        </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
 
-
-        <div class="event-participants-section">
-            <h4>Список учасників:</h4>
-            <ul>
-                {% for participant in event.participants %}
-                    <li class="participant-row" id="participant-{{ participant.user_id }}">
-                        
-                        <span class="participant-info-group">
-                            <span class="participant-name">
-                                {{ participant.user.nickname or participant.user.username }}
-                            </span>
-                            {% if participant.team_name %}
-                                <span class="team-badge">{{ participant.team_name }}</span>
-                            {% endif %}
-                            
-                            <span class="participation-info">
-                                (Запис: {{ format_datetime_for_display(participant.join_date) }})
-                            </span>
-                        </span>
-
-                        <span class="participant-actions-group">
-                            
-                            {% if current_user.is_authenticated and current_user.can_manage_events() and participant.stats %}
-                                <span class="admin-stats">
-                                    Тиждень: <strong>{{ participant.stats.weekly_count }}</strong>, 
-                                    30 днів: <strong>{{ participant.stats.monthly_count }}</strong>
-                                </span>
-                            {% endif %}
-                            
-                            {% if current_user.is_authenticated and current_user.can_manage_events() %}
-                                <button 
-                                    class="remove-participant-btn" 
-                                    onclick="promptAndRemoveParticipant({{ event.id }}, {{ participant.user_id }})"
-                                    title="Зняти учасника з гри та залишити помітку"
-                                >
-                                    Зняти з гри
-                                </button>
-                            {% endif %}
-                        </span>
+        {% if current_user.is_authenticated and user_events_next_7_days %}
+        <div class="personal-calendar-section">
+            <h3 class="section-title">Ваші події на найближчі 7 днів</h3>
+            <ul class="clean-list">
+                {% for event in user_events_next_7_days %}
+                    <li>
+                        <strong>{{ format_datetime_for_display(event.date) }}</strong>: 
+                        <span>{{ event.name }}</span>
                     </li>
                 {% endfor %}
             </ul>
         </div>
+        {% endif %}
+
+        <div class="events-list">
+            <h3 class="section-title">Заплановані події</h3>
+            {% if events %}
+                {% for event in events %}
+                    <div class="event-card" id="event-{{ event.id }}">
+                        <h2 class="event-title">
+                            {{ event.name }} 
+                            <span class="event-date">{{ format_datetime_for_display(event.date) }}</span>
+                        </h2>
+                        
+                        {% if event.image_url %}
+                            <img src="{{ event.image_url }}" alt="Зображення події" class="event-image">
+                        {% endif %}
+
+                        {% if event.comment %}
+                            <p class="event-comment">{{ event.comment | safe }}</p>
+                        {% endif %}
+
+                        <div class="teams-container">
+                            {% for team_name, members in event.teams.items() %}
+                                <div class="team-block" style="background-color: {{ event.team_colors.get(team_name, '#e9ecef') }};">
+                                    <h4 class="team-name-badge">{{ team_name }}</h4>
+                                    <ul class="team-members">
+                                        {% for member_username in members %}
+                                            <li>{{ user_nicknames.get(member_username, member_username) }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <h4>Список учасників:</h4>
+                        <ul>
+                            {% for p_entry in event.processed_participants %}
+                                <li class="participant-row" id="participant-{{ p_entry.user_id }}">
+                                    
+                                    <span class="participant-info-group">
+                                        <span class="participant-name">
+                                            {{ p_entry.nickname }} 
+                                            {% if p_entry.username in paid_users_for_current_month %}
+                                                <span class="fee-paid-badge" title="Внесок за поточний місяць сплачено">&#10003;</span>
+                                            {% endif %}
+                                        </span>
+                                        
+                                        {% if p_entry.assigned_team_name %}
+                                            <span class="team-badge" style="background-color: {{ event.team_colors.get(p_entry.assigned_team_name, '#e9ecef') }};">
+                                                {{ p_entry.assigned_team_name }} 😉
+                                            </span>
+                                        {% endif %}
+
+                                        <span class="participation-info">
+                                            (Запис: {{ format_datetime_for_display(p_entry.timestamp) }}{% if p_entry.status == 'cancelled' %}<span class="cancelled-badge">Відмовився</span>{% endif %})
+                                        </span>
+                                    </span>
+                                    
+                                    <span class="participant-actions-group">
+                                        
+                                        {% if current_user.is_authenticated and current_user.can_manage_events() and p_entry.stats %}
+                                            <span class="admin-stats" title="Ігор на цьому тижні / за останні 30 днів">
+                                                Тиждень: <strong>{{ p_entry.stats.weekly_count }}</strong>, 
+                                                30 днів: <strong>{{ p_entry.stats.monthly_count }}</strong>
+                                            </span>
+                                        {% endif %}
+                                        
+                                        {% if current_user.is_authenticated and current_user.can_manage_events() %}
+                                            <button 
+                                                class="remove-participant-btn" 
+                                                onclick="promptAndRemoveParticipant({{ event.id }}, {{ p_entry.user_id }})"
+                                                title="Зняти учасника з гри та залишити помітку"
+                                            >
+                                                Зняти з гри
+                                            </button>
+                                        {% endif %}
+                                    </span>
+
+                                </li>
+                            {% else %}
+                                <li>Поки що ніхто не зареєструвався.</li>
+                            {% endfor %}
+                        </ul>
+                        
+
+                        {% if current_user.is_authenticated %}
+                            {% set is_participant = EventParticipant.query.filter_by(event_id=event.id, user_id=current_user.id).first() %}
+                            <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST" style="display: inline-block;">
+                                <button type="submit" class="toggle-participation-btn {{ 'cancel-btn' if is_participant else 'join-btn' }}">
+                                    {% if is_participant %}Скасувати участь{% else %}Я зможу{% endif %}
+                                </button>
+                            </form>
+                            {% if current_user.can_manage_events() %}
+                                <div class="admin-event-actions">
+                                    <a href="{{ url_for('manage_teams', event_id=event.id) }}" class="admin-manage-teams-link small-button">Керувати командами</a>
+                                    {% if current_user.is_admin() %}
+                                    <a href="{{ url_for('edit_event', event_id=event.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
+                                    <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;"><button type="submit" class="admin-delete-event-btn small-button" onclick="return confirm('Ви впевнені?');">Видалити</button></form>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <p>Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a>, щоб відмітити участь.</p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>Наразі немає запланованих подій.</p>
+            {% endif %}
         </div>
-    {% endfor %}
-    
+    </div>
     <script>
         function promptAndRemoveParticipant(eventId, userId) {
             // Запит помітки у адміністратора
@@ -96,7 +271,7 @@
             // Створюємо форму для POST-запиту
             const form = document.createElement('form');
             form.method = 'POST';
-            // Використовуємо url_for з Python, щоб отримати коректний URL
+            // Вказуємо action на новий API-маршрут
             form.action = "{{ url_for('remove_participant_api', event_id=0) }}".replace('0', eventId);
             
             // Поле для ID користувача
@@ -118,5 +293,5 @@
             form.submit();
         }
     </script>
-
-{% endblock %}
+</body>
+</html>
