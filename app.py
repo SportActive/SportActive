@@ -31,7 +31,7 @@ s = URLSafeTimedSerializer(app.secret_key)
 
 # --- Палітра кольорів для команд ---
 TEAM_COLORS_PALETTE = [
-    '#e0f7fa', '#dcedc8', '#fff9c4', '#ffcdd2', '#e1bee7', 
+    '#e0f7fa', '#dcedc8', '#fff9c4', '#ffcdd2', '#e1bee7',
     '#d1c4e9', '#c5cae9', '#bbdefb', '#b2ebf2', '#b2dfdb'
 ]
 
@@ -50,7 +50,7 @@ def utility_processor():
                 return dt_obj.strftime('%d.%m.%Y')
             except ValueError:
                 return dt_str
-    
+
     def format_date_only_for_display(date_str):
         if not date_str: return "Н/Д"
         try:
@@ -58,8 +58,8 @@ def utility_processor():
             return dt_obj.strftime('%d.%m.%Y')
         except ValueError:
             return date_str
-            
-    return dict(enumerate=enumerate, 
+
+    return dict(enumerate=enumerate,
                 format_datetime_for_display=format_datetime_for_display,
                 format_date_only_for_display=format_date_only_for_display)
 
@@ -69,15 +69,15 @@ def inject_unread_status():
         return dict(has_unread_announcements=False, has_unread_polls=False)
 
     seen_items = current_user.seen_items
-    
+
     all_announcement_ids = {a.id for a in Announcement.query.with_entities(Announcement.id).all()}
     seen_announcement_ids = set(seen_items.get('announcements', []))
     has_unread_announcements = bool(all_announcement_ids - seen_announcement_ids)
-    
+
     all_poll_ids = {p.id for p in Poll.query.with_entities(Poll.id).all()}
     seen_poll_ids = set(seen_items.get('polls', []))
     has_unread_polls = bool(all_poll_ids - seen_poll_ids)
-    
+
     return dict(has_unread_announcements=has_unread_announcements, has_unread_polls=has_unread_polls)
 
 
@@ -146,8 +146,8 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     date = db.Column(db.String(20), nullable=False)
-    image_url = db.Column(db.String(255), nullable=True, default=None) 
-    participants_json = db.Column(db.Text, default='[]') 
+    image_url = db.Column(db.String(255), nullable=True, default=None)
+    participants_json = db.Column(db.Text, default='[]')
     teams_json = db.Column(db.Text, default='{}')
     comment = db.Column(db.Text, nullable=True)
 
@@ -179,9 +179,9 @@ class EventParticipant(db.Model):
     # Зберігаємо team_name на момент запису
     team_name = db.Column(db.String(80), default=None)
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # НОВЕ: Статус для відстеження пізньої відмови або зняття адміном
-    status = db.Column(db.String(20), default='active') 
+    status = db.Column(db.String(20), default='active')
 
     user = db.relationship('User', backref=db.backref('participations', lazy='dynamic'))
     event = db.relationship('Event', backref=db.backref('real_participants', lazy='dynamic'))
@@ -613,8 +613,7 @@ def index():
             event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
             if event_dt < current_time:
                 # Використовуємо JSON-структуру для логування, як у вашому оригіналі
-                active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event.id).filter(EventParticipant.status.in_(['active'])).all()]
-
+                active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event.id, status='active').all()]
                 cancelled_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event.id).filter(EventParticipant.status.in_(['refused', 'removed'])).all()]
 
                 new_log_entry = GameLog(
@@ -626,6 +625,8 @@ def index():
 
                 # Видалення відповідних EventParticipant записів
                 EventParticipant.query.filter_by(event_id=event.id).delete()
+                # Видалення логів про зняття з цієї події
+                RemovedParticipantLog.query.filter_by(event_id=event.id).delete()
 
                 events_to_delete.append(event)
 
@@ -655,8 +656,6 @@ def index():
         color_cycle = itertools.cycle(TEAM_COLORS_PALETTE)
         event.team_colors = {team_name: next(color_cycle) for team_name in unique_team_names}
 
-        # 2. Отримання та обробка учасників
-        # Отримуємо ВСІХ учасників (активних, відмовилися, знятих) для відображення списку
         all_participants_entries = EventParticipant.query.filter_by(event_id=event.id).order_by(EventParticipant.join_date.asc()).all()
 
         processed_participants = []
@@ -676,59 +675,39 @@ def index():
                 'status': p_entry.status,
                 'stats': None
             }
-
             processed_participants.append(p_dict)
 
-            # Прапорець is_participant встановлюється, лише якщо статус 'active'
             if current_user.is_authenticated and user.id == current_user.id and p_entry.status == 'active':
                 is_participant = True
 
         event.processed_participants = processed_participants
         event.is_participant = is_participant
 
-        # 3. Підрахунок АКТИВНИХ учасників для ліміту
-        event.active_participants_count = EventParticipant.query.filter_by(event_id=event.id).filter(
-            EventParticipant.status.in_(['active'])
-        ).count()
+        event.active_participants_count = EventParticipant.query.filter_by(event_id=event.id, status='active').count()
 
-        # 4. Логіка розрахунку статистики (ТІЛЬКИ ДЛЯ АКТИВНИХ)
         if current_user.is_authenticated and current_user.can_manage_events():
             current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
             next_seven_days_date_str = (current_time + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
             last_thirty_days_date_str = (current_time - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
 
             for p_dict in event.processed_participants:
-                user_id = p_dict['user_id']
-
                 if p_dict['status'] == 'active':
-                    # 1. Ігри на цьому тижні (лише активні)
+                    user_id = p_dict['user_id']
                     weekly_count = db.session.query(EventParticipant).join(Event).filter(
-                        EventParticipant.user_id == user_id,
-                        EventParticipant.status == 'active',
-                        Event.date >= current_time_str,
-                        Event.date <= next_seven_days_date_str,
+                        EventParticipant.user_id == user_id, EventParticipant.status == 'active',
+                        Event.date >= current_time_str, Event.date <= next_seven_days_date_str
                     ).count()
-
-                    # 2. Ігри за останні 30 днів (лише активні)
                     monthly_count = db.session.query(EventParticipant).join(Event).filter(
-                        EventParticipant.user_id == user_id,
-                        EventParticipant.status == 'active',
-                        Event.date >= last_thirty_days_date_str,
-                        Event.date < current_time_str,
+                        EventParticipant.user_id == user_id, EventParticipant.status == 'active',
+                        Event.date >= last_thirty_days_date_str, Event.date < current_time_str
                     ).count()
-
-                    p_dict['stats'] = {
-                        'weekly_count': weekly_count,
-                        'monthly_count': monthly_count
-                    }
+                    p_dict['stats'] = {'weekly_count': weekly_count, 'monthly_count': monthly_count}
                 else:
-                    p_dict['stats'] = None # Не показуємо статистику для неактивних
+                    p_dict['stats'] = None
 
         events_with_team_info.append(event)
 
     user_events_next_7_days = [e for e in events_with_team_info if e.is_participant]
-
-    # !!! ПЕРЕДАЧА EventParticipant У ШАБЛОН ТА КОНТРОЛЬ ВІДСТУПІВ !!!
     return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month, EventParticipant=EventParticipant, RemovedParticipantLog=RemovedParticipantLog)
 
 @app.route('/add_event', methods=['GET', 'POST'])
@@ -803,11 +782,8 @@ def delete_event(event_id):
         return redirect(url_for('index'))
 
     event = Event.query.get_or_404(event_id)
-
-    # Видаляємо пов'язані EventParticipant та RemovedParticipantLog записи перед видаленням Event
     EventParticipant.query.filter_by(event_id=event_id).delete()
     RemovedParticipantLog.query.filter_by(event_id=event_id).delete()
-
     db.session.delete(event)
     db.session.commit()
     flash('Подію успішно видалено!', 'success')
@@ -824,12 +800,16 @@ def manage_teams(event_id):
     all_users = User.query.all()
     user_nicknames = {u.username: u.nickname or u.username for u in all_users}
 
-    # Використовуємо реальних учасників з EventParticipant
-    all_active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event_id).all()]
+    # === ИСПРАВЛЕННАЯ СТРОКА ===
+    # Берем только активных участников для распределения по командам
+    all_active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event_id, status='active').all()]
+    # ==========================
+
     assigned_participants = {member for members in event.teams.values() for member in members}
     unassigned_participants = [p for p in all_active_participants if p not in assigned_participants]
 
     return render_template('manage_teams.html', event=event, unassigned_participants=unassigned_participants, user_nicknames=user_nicknames, current_user=current_user)
+
 
 @app.route('/save_teams/<int:event_id>', methods=['POST'])
 @login_required
@@ -917,7 +897,7 @@ def export_finances():
 
     output = si.getvalue()
     filename = f"finances_{period_filter}.csv" if period_filter else "finances_all.csv"
-    response = make_response('\ufeff' + output) # Создаем response здесь
+    response = make_response('\ufeff' + output)
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
@@ -1179,47 +1159,6 @@ def update_user_role(user_id):
         flash('Неприпустима роль.', 'error')
 
     return redirect(url_for('finances'))
-
-@app.route('/manage_teams/<int:event_id>')
-@login_required
-def manage_teams(event_id):
-    if not current_user.can_manage_events():
-        flash('У вас немає дозволу на керування командами.', 'error')
-        return redirect(url_for('index'))
-
-    event = Event.query.get_or_404(event_id)
-    all_users = User.query.all()
-    user_nicknames = {u.username: u.nickname or u.username for u in all_users}
-
-    # Використовуємо реальних учасників з EventParticipant
-    all_active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event_id).all()]
-    assigned_participants = {member for members in event.teams.values() for member in members}
-    unassigned_participants = [p for p in all_active_participants if p not in assigned_participants]
-
-    return render_template('manage_teams.html', event=event, unassigned_participants=unassigned_participants, user_nicknames=user_nicknames, current_user=current_user)
-
-@app.route('/save_teams/<int:event_id>', methods=['POST'])
-@login_required
-def save_teams(event_id):
-    if not current_user.can_manage_events():
-        flash('У вас немає дозволу на керування командами.', 'error')
-        return redirect(url_for('index'))
-
-    event = Event.query.get_or_404(event_id)
-    new_teams = {}
-    for key, value in request.form.items():
-        if key.startswith('team_name_'):
-            team_index = key.split('_')[-1]
-            team_name = value.strip()
-            if team_name:
-                members_str = request.form.get(f'team_members_{team_index}', '')
-                new_teams[team_name] = [m.strip() for m in members_str.split(',') if m.strip()]
-
-    event.teams = new_teams
-    db.session.commit()
-    flash('Команди успішно збережено!', 'success')
-    return redirect(url_for('manage_teams', event_id=event.id))
-
 
 if __name__ == '__main__':
     with app.app_context():
