@@ -33,15 +33,6 @@
             color: #34495e;
         }
         
-        .team-badge {
-            font-size: 0.75em;
-            padding: 2px 6px;
-            border-radius: 3px;
-            margin-left: 10px;
-            font-weight: 700;
-            color: #333; /* Залишаємо темним, щоб було видно на кольоровому фоні */
-        }
-        
         /* НОВІ СТИЛІ СТАТУСІВ */
         .cancelled-badge {
             display: inline-block;
@@ -61,6 +52,15 @@
             color: #343a40;
         }
 
+        .team-badge {
+            font-size: 0.75em;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 10px;
+            font-weight: 700;
+            color: #333; /* Залишаємо темним, щоб було видно на кольоровому фоні */
+        }
+        
         .remove-participant-btn {
             background-color: #dc3545;
             color: white;
@@ -257,13 +257,12 @@
                                 <li>Поки що ніхто не зареєструвався.</li>
                             {% endfor %}
                         </ul>
-                        
 
                         {% if current_user.is_authenticated %}
                             {% set is_participant = EventParticipant.query.filter_by(event_id=event.id, user_id=current_user.id, status='active').first() %}
                             <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST" style="display: inline-block;">
-                                <button type="submit" class="toggle-participation-btn {{ 'cancel-btn' if is_participant else 'join-btn' }}">
-                                    {% if is_participant %}Скасувати участь{% else %}Я зможу{% endif %}
+                                <button type="submit" class="button {% if event.is_participant %}cancel-button{% else %}join-button{% endif %}">
+                                    {% if event.is_participant %}Скасувати участь{% else %}Я зможу{% endif %}
                                 </button>
                             </form>
                             {% if current_user.can_manage_events() %}
@@ -306,9 +305,7 @@
             userIdInput.value = userId;
             form.appendChild(userIdInput);
             
-            // Нам не потрібен reasonInput, оскільки причина фіксована на сервері,
-            // але ми залишаємо можливість, якщо сервер очікує форму.
-            // Якщо серверу не потрібен параметр 'reason', його можна не додавати.
+            // Нам не потрібен reasonInput, оскільки причина фіксована на сервері.
             
             // Додаємо форму до тіла документа і відправляємо її
             document.body.appendChild(form);

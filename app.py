@@ -1180,6 +1180,46 @@ def update_user_role(user_id):
 
     return redirect(url_for('finances'))
 
+@app.route('/manage_teams/<int:event_id>')
+@login_required
+def manage_teams(event_id):
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу на керування командами.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+    all_users = User.query.all()
+    user_nicknames = {u.username: u.nickname or u.username for u in all_users}
+
+    # Використовуємо реальних учасників з EventParticipant
+    all_active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event_id).all()]
+    assigned_participants = {member for members in event.teams.values() for member in members}
+    unassigned_participants = [p for p in all_active_participants if p not in assigned_participants]
+
+    return render_template('manage_teams.html', event=event, unassigned_participants=unassigned_participants, user_nicknames=user_nicknames, current_user=current_user)
+
+@app.route('/save_teams/<int:event_id>', methods=['POST'])
+@login_required
+def save_teams(event_id):
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу на керування командами.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+    new_teams = {}
+    for key, value in request.form.items():
+        if key.startswith('team_name_'):
+            team_index = key.split('_')[-1]
+            team_name = value.strip()
+            if team_name:
+                members_str = request.form.get(f'team_members_{team_index}', '')
+                new_teams[team_name] = [m.strip() for m in members_str.split(',') if m.strip()]
+
+    event.teams = new_teams
+    db.session.commit()
+    flash('Команди успішно збережено!', 'success')
+    return redirect(url_for('manage_teams', event_id=event.id))
+
 
 if __name__ == '__main__':
     with app.app_context():
