@@ -813,6 +813,666 @@ def delete_event(event_id):
     flash('Подію успішно видалено!', 'success')
     return redirect(url_for('index'))
 
+# Змінено: Цей маршрут тепер додає/видаляє запис з EventParticipant, а не JSON
+@app.route('/toggle_participation/<int:event_id>', methods=['POST'])
+@login_required
+def toggle_participation(event_id):
+    event = Event.query.get_or_404(event_id)
+    # Шукаємо запис, незалежно від статусу
+    participant_entry = EventParticipant.query.filter_by(event_id=event_id, user_id=current_user.id).first()
+    
+    if participant_entry:
+        if participant_entry.status == 'active':
+            # --- ЛОГІКА СКАСУВАННЯ УЧАСТІ З ПЕРЕВІРКОЮ ЧАСУ (1-ГОДИННЕ ВІКНО) ---
+            time_since_join = datetime.utcnow() - participant_entry.join_date
+            
+            if time_since_join <= timedelta(hours=1):
+                # 1. Скасування впродовж 1 години: Повністю видаляємо
+                db.session.delete(participant_entry)
+                flash(f'Вашу участь у події "{event.name}" скасовано (повністю видалено).', 'info')
+            else:
+                # 2. Скасування після 1 години: Змінюємо статус на 'refused'
+                participant_entry.status = 'refused'
+                flash(f'Ви відмовилися від участі у події "{event.name}". Вас позначено як "Відмовився".', 'warning')
+                
+            # Видаляємо зі списку команд (логіка JSON)
+            teams = event.teams
+            for team_name, members in teams.items():
+                if current_user.username in members: members.remove(current_user.username)
+            event.teams = teams
+            
+        elif participant_entry.status in ('refused', 'removed'):
+            # Якщо вже відмовився/знятий, відновлюємо участь
+            participant_entry.status = 'active'
+            participant_entry.join_date = datetime.utcnow() # Оновлюємо час запису
+            flash(f'Ваша участь у події "{event.name}" відновлена!', 'success')
+            
+    else:
+        # Реєстрація на подію (новий учасник)
+        participants_count = EventParticipant.query.filter_by(event_id=event_id).filter(
+            EventParticipant.status.in_(['active'])
+        ).count()
+        
+        # NOTE: У вашій моделі Event немає поля max_participants. Якщо воно з'явиться, додати перевірку тут.
+        # if event.max_participants is not None and participants_count >= event.max_participants:
+        #     flash('На жаль, кількість учасників досягла максимуму.', 'error')
+        #     return redirect(url_for('index'))
+
+        new_participant = EventParticipant(
+            event_id=event_id, 
+            user_id=current_user.id,
+            team_name=current_user.nickname or current_user.username,
+            status='active' 
+        )
+        db.session.add(new_participant)
+        flash(f'Ви успішно зареєструвалися на подію!', 'success')
+    
+    db.session.commit()
+    return redirect(url_for('index'))
+
+# --- МАРШРУТ ЗНЯТТЯ АДМІНІСТРАТОРОМ (ОНОВЛЕНО) ---
+@app.route('/api/event/<int:event_id>/remove_participant', methods=['POST'])
+@login_required
+def remove_participant_api(event_id):
+    """
+    Адміністратор знімає учасника з гри миттєво з фіксованою поміткою.
+    """
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу на цю дію.', 'error')
+        return redirect(url_for('index')) 
+
+    user_id_to_remove = request.form.get('user_id', type=int)
+    FIXED_REASON = "Перенесено на інший день" # Фіксована помітка
+    
+    if not user_id_to_remove:
+        flash('Не вказано ID користувача для видалення.', 'error')
+        return redirect(url_for('index') + f'#event-{event_id}')
+
+    participant_to_update = EventParticipant.query.filter_by(
+        event_id=event_id, 
+        user_id=user_id_to_remove
+    ).first()
+    event = Event.query.get(event_id)
+    removed_user_obj = User.query.get(user_id_to_remove)
+
+    if participant_to_update and event and removed_user_obj:
+        try:
+            # 1. Створюємо запис у лозі з фіксованою причиною
+            log = RemovedParticipantLog(
+                removed_user_id=user_id_to_remove,
+                event_id=event_id,
+                admin_id=current_user.id,
+                reason=FIXED_REASON 
+            )
+            db.session.add(log)
+            
+            # 2. Змінюємо статус учасника на 'removed'
+            participant_to_update.status = 'removed'
+            
+            # 3. Видаляємо з команд (логіка JSON)
+            teams = event.teams
+            username_to_remove = removed_user_obj.username
+            for team_name, members in teams.items():
+                if username_to_remove in members: members.remove(username_to_remove)
+            event.teams = teams 
+            
+            db.session.commit()
+            
+            removed_user_name = removed_user_obj.nickname or removed_user_obj.username
+            flash(f'Учасника ({removed_user_name}) знято з гри. Помітка: "{FIXED_REASON}"', 'success')
+
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Помилка видалення учасника: {e}")
+            flash('Помилка сервера при видаленні учасника.', 'error')
+    else:
+        flash('Учасника не знайдено у цій події або подія/користувач не існує.', 'error')
+
+    return redirect(url_for('index') + f'#event-{event_id}')
+
+# --- ГОЛОВНА СТОРІНКА (ОНОВЛЕНО) ---
+@app.route('/')
+def index():
+    current_time = datetime.now()
+    events_to_delete = []
+    
+    all_events_from_db = Event.query.order_by(Event.date).all()
+    
+    for event in all_events_from_db:
+        try:
+            event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+            if event_dt < current_time:
+                # Використовуємо JSON-структуру для логування, як у вашому оригіналі
+                active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event.id).filter(EventParticipant.status.in_(['active'])).all()]
+                
+                cancelled_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event.id).filter(EventParticipant.status.in_(['refused', 'removed'])).all()]
+                
+                new_log_entry = GameLog(
+                    event_name=event.name, event_date=event.date,
+                    active_participants=active_participants, cancelled_participants=cancelled_participants,
+                    teams=event.teams, image_url=event.image_url, comment=event.comment
+                )
+                db.session.add(new_log_entry)
+                
+                # Видалення відповідних EventParticipant записів
+                EventParticipant.query.filter_by(event_id=event.id).delete()
+                
+                events_to_delete.append(event)
+                
+        except ValueError:
+            app.logger.error(f"Could not parse date for event '{event.name}': {event.date}")
+            
+    if events_to_delete:
+        for event in events_to_delete:
+            db.session.delete(event)
+        db.session.commit()
+
+    # Оновлена логіка перевірки внесків
+    current_month_str = datetime.now().strftime('%Y-%m')
+    paid_transactions = FinancialTransaction.query.filter(
+        FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")
+    ).all()
+    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in paid_transactions if ' від ' in t.description}
+
+    all_users = User.query.all()
+    user_nicknames = {u.username: u.nickname or u.username for u in all_users}
+
+    events_for_display = Event.query.filter(Event.date >= datetime.now().strftime('%Y-%m-%d %H:%M:%S')).order_by(Event.date).all()
+    events_with_team_info = []
+
+    for event in events_for_display:
+        unique_team_names = sorted(list(event.teams.keys()))
+        color_cycle = itertools.cycle(TEAM_COLORS_PALETTE)
+        event.team_colors = {team_name: next(color_cycle) for team_name in unique_team_names}
+
+        # 2. Отримання та обробка учасників
+        # Отримуємо ВСІХ учасників (активних, відмовилися, знятих) для відображення списку
+        all_participants_entries = EventParticipant.query.filter_by(event_id=event.id).order_by(EventParticipant.join_date.asc()).all()
+        
+        processed_participants = []
+        is_participant = False
+        
+        for p_entry in all_participants_entries:
+            user = User.query.get(p_entry.user_id)
+            if not user: continue 
+
+            p_dict = {
+                'id': p_entry.id,
+                'user_id': user.id,
+                'username': user.username,
+                'nickname': user.nickname or user.username,
+                'assigned_team_name': next((name for name, members in event.teams.items() if user.username in members), ''),
+                'timestamp': p_entry.join_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'status': p_entry.status, 
+                'stats': None 
+            }
+            
+            processed_participants.append(p_dict)
+            
+            # Прапорець is_participant встановлюється, лише якщо статус 'active'
+            if current_user.is_authenticated and user.id == current_user.id and p_entry.status == 'active':
+                is_participant = True
+            
+        event.processed_participants = processed_participants 
+        event.is_participant = is_participant 
+        
+        # 3. Підрахунок АКТИВНИХ учасників для ліміту
+        event.active_participants_count = EventParticipant.query.filter_by(event_id=event.id).filter(
+            EventParticipant.status.in_(['active'])
+        ).count()
+        
+        # 4. Логіка розрахунку статистики (ТІЛЬКИ ДЛЯ АКТИВНИХ)
+        if current_user.is_authenticated and current_user.can_manage_events():
+            current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
+            next_seven_days_date_str = (current_time + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+            last_thirty_days_date_str = (current_time - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
+
+            for p_dict in event.processed_participants:
+                user_id = p_dict['user_id']
+                
+                if p_dict['status'] == 'active':
+                    # 1. Ігри на цьому тижні (лише активні)
+                    weekly_count = db.session.query(EventParticipant).join(Event).filter(
+                        EventParticipant.user_id == user_id,
+                        EventParticipant.status == 'active', 
+                        Event.date >= current_time_str,
+                        Event.date <= next_seven_days_date_str,
+                    ).count()
+
+                    # 2. Ігри за останні 30 днів (лише активні)
+                    monthly_count = db.session.query(EventParticipant).join(Event).filter(
+                        EventParticipant.user_id == user_id,
+                        EventParticipant.status == 'active', 
+                        Event.date >= last_thirty_days_date_str,
+                        Event.date < current_time_str,
+                    ).count()
+                    
+                    p_dict['stats'] = {
+                        'weekly_count': weekly_count,
+                        'monthly_count': monthly_count
+                    }
+                else:
+                    p_dict['stats'] = None # Не показуємо статистику для неактивних
+
+        events_with_team_info.append(event)
+    
+    user_events_next_7_days = [e for e in events_with_team_info if e.is_participant]
+    
+    # !!! ПЕРЕДАННЯ EventParticipant У ШАБЛОН ТА КОНТРОЛЬ ВІДСТУПІВ !!!
+    return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month, EventParticipant=EventParticipant, RemovedParticipantLog=RemovedParticipantLog)
+
+@app.route('/add_event', methods=['GET', 'POST'])
+@login_required
+def add_event():
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу на додавання подій.', 'error')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        event_name = request.form['event_name']
+        event_datetime_str = request.form['event_datetime'] 
+        image_url = request.form.get('image_url')
+        comment = request.form.get('comment')
+
+        if event_name and event_datetime_str:
+            try:
+                dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
+                formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+                new_event = Event(
+                    name=event_name, date=formatted_datetime,
+                    image_url=image_url if image_url else None,
+                    comment=comment, participants_json='[]', teams_json='{}'
+                )
+                db.session.add(new_event)
+                db.session.commit()
+                flash('Подію успішно додано!', 'success')
+                return redirect(url_for('index'))
+            except ValueError:
+                flash('Неправильний формат дати.', 'error')
+        else:
+            flash('Будь ласка, заповніть усі поля.', 'error')
+    
+    return render_template('add_event.html', current_user=current_user)
+
+@app.route('/edit_event/<int:event_id>', methods=['GET', 'POST'])
+@login_required
+def edit_event(event_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на редагування подій.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+
+    if request.method == 'POST':
+        event.name = request.form['event_name']
+        event_datetime_str = request.form['event_datetime']
+        event.image_url = request.form.get('image_url') or None
+        event.comment = request.form.get('comment')
+
+        try:
+            dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
+            event.date = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+            db.session.commit()
+            flash('Подію успішно оновлено!', 'success')
+            return redirect(url_for('index'))
+        except ValueError:
+            flash('Неправильний формат дати.', 'error')
+    
+    try:
+        event.formatted_datetime_local = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%dT%H:%M')
+    except (ValueError, TypeError):
+        event.formatted_datetime_local = ''
+
+    return render_template('edit_event.html', event=event, current_user=current_user)
+
+@app.route('/delete_event/<int:event_id>', methods=['POST'])
+@login_required
+def delete_event(event_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на видалення подій.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+    
+    # Видаляємо пов'язані EventParticipant та RemovedParticipantLog записи перед видаленням Event
+    EventParticipant.query.filter_by(event_id=event_id).delete()
+    RemovedParticipantLog.query.filter_by(event_id=event_id).delete()
+    
+    db.session.delete(event)
+    db.session.commit()
+    flash('Подію успішно видалено!', 'success')
+    return redirect(url_for('index'))
+
+# Змінено: Цей маршрут тепер додає/видаляє запис з EventParticipant, а не JSON
+@app.route('/toggle_participation/<int:event_id>', methods=['POST'])
+@login_required
+def toggle_participation(event_id):
+    event = Event.query.get_or_404(event_id)
+    # Шукаємо запис, незалежно від статусу
+    participant_entry = EventParticipant.query.filter_by(event_id=event_id, user_id=current_user.id).first()
+    
+    if participant_entry:
+        if participant_entry.status == 'active':
+            # --- ЛОГІКА СКАСУВАННЯ УЧАСТІ З ПЕРЕВІРКОЮ ЧАСУ (1-ГОДИННЕ ВІКНО) ---
+            time_since_join = datetime.utcnow() - participant_entry.join_date
+            
+            if time_since_join <= timedelta(hours=1):
+                # 1. Скасування впродовж 1 години: Повністю видаляємо
+                db.session.delete(participant_entry)
+                flash(f'Вашу участь у події "{event.name}" скасовано (повністю видалено).', 'info')
+            else:
+                # 2. Скасування після 1 години: Змінюємо статус на 'refused'
+                participant_entry.status = 'refused'
+                flash(f'Ви відмовилися від участі у події "{event.name}". Вас позначено як "Відмовився".', 'warning')
+                
+            # Видаляємо зі списку команд (логіка JSON)
+            teams = event.teams
+            for team_name, members in teams.items():
+                if current_user.username in members: members.remove(current_user.username)
+            event.teams = teams
+            
+        elif participant_entry.status in ('refused', 'removed'):
+            # Якщо вже відмовився/знятий, відновлюємо участь
+            participant_entry.status = 'active'
+            participant_entry.join_date = datetime.utcnow() # Оновлюємо час запису
+            flash(f'Ваша участь у події "{event.name}" відновлена!', 'success')
+            
+    else:
+        # Реєстрація на подію (новий учасник)
+        participants_count = EventParticipant.query.filter_by(event_id=event_id).filter(
+            EventParticipant.status.in_(['active'])
+        ).count()
+        
+        # NOTE: У вашій моделі Event немає поля max_participants. Якщо воно з'явиться, додати перевірку тут.
+        # if event.max_participants is not None and participants_count >= event.max_participants:
+        #     flash('На жаль, кількість учасників досягла максимуму.', 'error')
+        #     return redirect(url_for('index'))
+
+        new_participant = EventParticipant(
+            event_id=event_id, 
+            user_id=current_user.id,
+            team_name=current_user.nickname or current_user.username,
+            status='active' 
+        )
+        db.session.add(new_participant)
+        flash(f'Ви успішно зареєструвалися на подію!', 'success')
+    
+    db.session.commit()
+    return redirect(url_for('index'))
+
+# --- МАРШРУТ ЗНЯТТЯ АДМІНІСТРАТОРОМ (ОНОВЛЕНО) ---
+@app.route('/api/event/<int:event_id>/remove_participant', methods=['POST'])
+@login_required
+def remove_participant_api(event_id):
+    """
+    Адміністратор знімає учасника з гри миттєво з фіксованою поміткою.
+    """
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу на цю дію.', 'error')
+        return redirect(url_for('index')) 
+
+    user_id_to_remove = request.form.get('user_id', type=int)
+    FIXED_REASON = "Перенесено на інший день" # Фіксована помітка
+    
+    if not user_id_to_remove:
+        flash('Не вказано ID користувача для видалення.', 'error')
+        return redirect(url_for('index') + f'#event-{event_id}')
+
+    participant_to_update = EventParticipant.query.filter_by(
+        event_id=event_id, 
+        user_id=user_id_to_remove
+    ).first()
+    event = Event.query.get(event_id)
+    removed_user_obj = User.query.get(user_id_to_remove)
+
+    if participant_to_update and event and removed_user_obj:
+        try:
+            # 1. Створюємо запис у лозі з фіксованою причиною
+            log = RemovedParticipantLog(
+                removed_user_id=user_id_to_remove,
+                event_id=event_id,
+                admin_id=current_user.id,
+                reason=FIXED_REASON 
+            )
+            db.session.add(log)
+            
+            # 2. Змінюємо статус учасника на 'removed'
+            participant_to_update.status = 'removed'
+            
+            # 3. Видаляємо з команд (логіка JSON)
+            teams = event.teams
+            username_to_remove = removed_user_obj.username
+            for team_name, members in teams.items():
+                if username_to_remove in members: members.remove(username_to_remove)
+            event.teams = teams 
+            
+            db.session.commit()
+            
+            removed_user_name = removed_user_obj.nickname or removed_user_obj.username
+            flash(f'Учасника ({removed_user_name}) знято з гри. Помітка: "{FIXED_REASON}"', 'success')
+
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"Помилка видалення учасника: {e}")
+            flash('Помилка сервера при видаленні учасника.', 'error')
+    else:
+        flash('Учасника не знайдено у цій події або подія/користувач не існує.', 'error')
+
+    return redirect(url_for('index') + f'#event-{event_id}')
+
+# --- ГОЛОВНА СТОРІНКА (ОНОВЛЕНО) ---
+@app.route('/')
+def index():
+    current_time = datetime.now()
+    events_to_delete = []
+    
+    all_events_from_db = Event.query.order_by(Event.date).all()
+    
+    for event in all_events_from_db:
+        try:
+            event_dt = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+            if event_dt < current_time:
+                # Використовуємо JSON-структуру для логування, як у вашому оригіналі
+                active_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event.id).filter(EventParticipant.status.in_(['active'])).all()]
+                
+                cancelled_participants = [p.user.username for p in EventParticipant.query.filter_by(event_id=event.id).filter(EventParticipant.status.in_(['refused', 'removed'])).all()]
+                
+                new_log_entry = GameLog(
+                    event_name=event.name, event_date=event.date,
+                    active_participants=active_participants, cancelled_participants=cancelled_participants,
+                    teams=event.teams, image_url=event.image_url, comment=event.comment
+                )
+                db.session.add(new_log_entry)
+                
+                # Видалення відповідних EventParticipant записів
+                EventParticipant.query.filter_by(event_id=event.id).delete()
+                
+                events_to_delete.append(event)
+                
+        except ValueError:
+            app.logger.error(f"Could not parse date for event '{event.name}': {event.date}")
+            
+    if events_to_delete:
+        for event in events_to_delete:
+            db.session.delete(event)
+        db.session.commit()
+
+    # Оновлена логіка перевірки внесків
+    current_month_str = datetime.now().strftime('%Y-%m')
+    paid_transactions = FinancialTransaction.query.filter(
+        FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")
+    ).all()
+    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in paid_transactions if ' від ' in t.description}
+
+    all_users = User.query.all()
+    user_nicknames = {u.username: u.nickname or u.username for u in all_users}
+
+    events_for_display = Event.query.filter(Event.date >= datetime.now().strftime('%Y-%m-%d %H:%M:%S')).order_by(Event.date).all()
+    events_with_team_info = []
+
+    for event in events_for_display:
+        unique_team_names = sorted(list(event.teams.keys()))
+        color_cycle = itertools.cycle(TEAM_COLORS_PALETTE)
+        event.team_colors = {team_name: next(color_cycle) for team_name in unique_team_names}
+
+        # 2. Отримання та обробка учасників
+        # Отримуємо ВСІХ учасників (активних, відмовилися, знятих) для відображення списку
+        all_participants_entries = EventParticipant.query.filter_by(event_id=event.id).order_by(EventParticipant.join_date.asc()).all()
+        
+        processed_participants = []
+        is_participant = False
+        
+        for p_entry in all_participants_entries:
+            user = User.query.get(p_entry.user_id)
+            if not user: continue 
+
+            p_dict = {
+                'id': p_entry.id,
+                'user_id': user.id,
+                'username': user.username,
+                'nickname': user.nickname or user.username,
+                'assigned_team_name': next((name for name, members in event.teams.items() if user.username in members), ''),
+                'timestamp': p_entry.join_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'status': p_entry.status, 
+                'stats': None 
+            }
+            
+            processed_participants.append(p_dict)
+            
+            # Прапорець is_participant встановлюється, лише якщо статус 'active'
+            if current_user.is_authenticated and user.id == current_user.id and p_entry.status == 'active':
+                is_participant = True
+            
+        event.processed_participants = processed_participants 
+        event.is_participant = is_participant 
+        
+        # 3. Підрахунок АКТИВНИХ учасників для ліміту
+        event.active_participants_count = EventParticipant.query.filter_by(event_id=event.id).filter(
+            EventParticipant.status.in_(['active'])
+        ).count()
+        
+        # 4. Логіка розрахунку статистики (ТІЛЬКИ ДЛЯ АКТИВНИХ)
+        if current_user.is_authenticated and current_user.can_manage_events():
+            current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
+            next_seven_days_date_str = (current_time + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+            last_thirty_days_date_str = (current_time - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
+
+            for p_dict in event.processed_participants:
+                user_id = p_dict['user_id']
+                
+                if p_dict['status'] == 'active':
+                    # 1. Ігри на цьому тижні (лише активні)
+                    weekly_count = db.session.query(EventParticipant).join(Event).filter(
+                        EventParticipant.user_id == user_id,
+                        EventParticipant.status == 'active', 
+                        Event.date >= current_time_str,
+                        Event.date <= next_seven_days_date_str,
+                    ).count()
+
+                    # 2. Ігри за останні 30 днів (лише активні)
+                    monthly_count = db.session.query(EventParticipant).join(Event).filter(
+                        EventParticipant.user_id == user_id,
+                        EventParticipant.status == 'active', 
+                        Event.date >= last_thirty_days_date_str,
+                        Event.date < current_time_str,
+                    ).count()
+                    
+                    p_dict['stats'] = {
+                        'weekly_count': weekly_count,
+                        'monthly_count': monthly_count
+                    }
+                else:
+                    p_dict['stats'] = None # Не показуємо статистику для неактивних
+
+        events_with_team_info.append(event)
+    
+    user_events_next_7_days = [e for e in events_with_team_info if e.is_participant]
+    
+    # !!! ПЕРЕДАЧА EventParticipant У ШАБЛОН ТА КОНТРОЛЬ ВІДСТУПІВ !!!
+    return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month, EventParticipant=EventParticipant, RemovedParticipantLog=RemovedParticipantLog)
+
+@app.route('/add_event', methods=['GET', 'POST'])
+@login_required
+def add_event():
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу на додавання подій.', 'error')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        event_name = request.form['event_name']
+        event_datetime_str = request.form['event_datetime'] 
+        image_url = request.form.get('image_url')
+        comment = request.form.get('comment')
+
+        if event_name and event_datetime_str:
+            try:
+                dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
+                formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+                new_event = Event(
+                    name=event_name, date=formatted_datetime,
+                    image_url=image_url if image_url else None,
+                    comment=comment, participants_json='[]', teams_json='{}'
+                )
+                db.session.add(new_event)
+                db.session.commit()
+                flash('Подію успішно додано!', 'success')
+                return redirect(url_for('index'))
+            except ValueError:
+                flash('Неправильний формат дати.', 'error')
+        else:
+            flash('Будь ласка, заповніть усі поля.', 'error')
+    
+    return render_template('add_event.html', current_user=current_user)
+
+@app.route('/edit_event/<int:event_id>', methods=['GET', 'POST'])
+@login_required
+def edit_event(event_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на редагування подій.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+
+    if request.method == 'POST':
+        event.name = request.form['event_name']
+        event_datetime_str = request.form['event_datetime']
+        event.image_url = request.form.get('image_url') or None
+        event.comment = request.form.get('comment')
+
+        try:
+            dt_object = datetime.strptime(event_datetime_str, '%Y-%m-%dT%H:%M')
+            event.date = dt_object.strftime('%Y-%m-%d %H:%M:%S')
+            db.session.commit()
+            flash('Подію успішно оновлено!', 'success')
+            return redirect(url_for('index'))
+        except ValueError:
+            flash('Неправильний формат дати.', 'error')
+    
+    try:
+        event.formatted_datetime_local = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%dT%H:%M')
+    except (ValueError, TypeError):
+        event.formatted_datetime_local = ''
+
+    return render_template('edit_event.html', event=event, current_user=current_user)
+
+@app.route('/delete_event/<int:event_id>', methods=['POST'])
+@login_required
+def delete_event(event_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на видалення подій.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+    
+    # Видаляємо пов'язані EventParticipant та RemovedParticipantLog записи перед видаленням Event
+    EventParticipant.query.filter_by(event_id=event_id).delete()
+    RemovedParticipantLog.query.filter_by(event_id=event_id).delete()
+    
+    db.session.delete(event)
+    db.session.commit()
+    flash('Подію успішно видалено!', 'success')
+    return redirect(url_for('index'))
+
 @app.route('/manage_teams/<int:event_id>')
 @login_required
 def manage_teams(event_id):

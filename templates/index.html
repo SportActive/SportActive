@@ -25,6 +25,7 @@
             margin-bottom: 5px;
             padding: 5px 0;
             border-bottom: 1px dashed #eee;
+            flex-wrap: wrap; /* Додано для адаптивності */
         }
 
         .participant-name {
@@ -41,10 +42,23 @@
             color: #333; /* Залишаємо темним, щоб було видно на кольоровому фоні */
         }
         
+        /* НОВІ СТИЛІ СТАТУСІВ */
         .cancelled-badge {
-            color: #dc3545;
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-weight: 600;
+            font-size: 0.8em;
             margin-left: 5px;
+            white-space: nowrap;
+        }
+        .refused-status {
+            background-color: #f8d7da; /* Червонуватий для пізньої відмови */
+            color: #721c24;
+        }
+        .removed-status {
+            background-color: #ffc107; /* Жовтий для знятого адміном */
+            color: #343a40;
         }
 
         .remove-participant-btn {
@@ -76,11 +90,14 @@
         .participant-info-group {
             display: flex;
             align-items: center;
+            flex-shrink: 0;
+            margin-right: 10px;
         }
 
         .participant-actions-group {
             display: flex;
             align-items: center;
+            margin-left: auto;
         }
         
         .fee-paid-badge {
@@ -178,6 +195,10 @@
                             {% endfor %}
                         </div>
 
+                        <p>Учасників: <strong>{{ event.active_participants_count }}</strong>
+                        {% if event.max_participants != None %}/ {{ event.max_participants }}{% endif %}
+                        </p>
+                        
                         <h4>Список учасників:</h4>
                         <ul>
                             {% for p_entry in event.processed_participants %}
@@ -198,29 +219,38 @@
                                         {% endif %}
 
                                         <span class="participation-info">
-                                            (Запис: {{ format_datetime_for_display(p_entry.timestamp) }}{% if p_entry.status == 'cancelled' %}<span class="cancelled-badge">Відмовився</span>{% endif %})
+                                            (Запис: {{ format_datetime_for_display(p_entry.timestamp) }}
+                                                {% if p_entry.status == 'refused' %}
+                                                    <span class="cancelled-badge refused-status">Відмовився</span>
+                                                {% elif p_entry.status == 'removed' %}
+                                                    <span class="cancelled-badge removed-status" style="background-color: #ffc107; color: #343a40;">
+                                                        Знятий (Перенесено на інший день)
+                                                    </span>
+                                                {% endif %}
+                                            )
                                         </span>
                                     </span>
                                     
-                                    <span class="participant-actions-group">
-                                        
-                                        {% if current_user.is_authenticated and current_user.can_manage_events() and p_entry.stats %}
-                                            <span class="admin-stats" title="Ігор на цьому тижні / за останні 30 днів">
-                                                Тиждень: <strong>{{ p_entry.stats.weekly_count }}</strong>, 
-                                                30 днів: <strong>{{ p_entry.stats.monthly_count }}</strong>
-                                            </span>
-                                        {% endif %}
-                                        
-                                        {% if current_user.is_authenticated and current_user.can_manage_events() %}
-                                            <button 
-                                                class="remove-participant-btn" 
-                                                onclick="promptAndRemoveParticipant({{ event.id }}, {{ p_entry.user_id }})"
-                                                title="Зняти учасника з гри та залишити помітку"
-                                            >
-                                                Зняти з гри
-                                            </button>
-                                        {% endif %}
-                                    </span>
+                                    {% if current_user.is_authenticated and current_user.can_manage_events() %}
+                                        <span class="participant-actions-group">
+                                            
+                                            {% if p_entry.stats and p_entry.status == 'active' %}
+                                                <span class="admin-stats" title="Ігор на цьому тижні / за останні 30 днів">
+                                                    Тиждень: <strong>{{ p_entry.stats.weekly_count }}</strong>, 
+                                                    30 днів: <strong>{{ p_entry.stats.monthly_count }}</strong>
+                                                </span>
+                                            {% endif %}
+                                            
+                                            {% if p_entry.status == 'active' %}
+                                                <button 
+                                                    class="remove-participant-btn" 
+                                                    onclick="removeParticipantImmediately({{ event.id }}, {{ p_entry.user_id }})"
+                                                    title="Зняти учасника з гри та позначити 'Перенесено на інший день'">
+                                                    Зняти
+                                                </button>
+                                            {% endif %}
+                                        </span>
+                                    {% endif %}
 
                                 </li>
                             {% else %}
@@ -230,7 +260,7 @@
                         
 
                         {% if current_user.is_authenticated %}
-                            {% set is_participant = EventParticipant.query.filter_by(event_id=event.id, user_id=current_user.id).first() %}
+                            {% set is_participant = EventParticipant.query.filter_by(event_id=event.id, user_id=current_user.id, status='active').first() %}
                             <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST" style="display: inline-block;">
                                 <button type="submit" class="toggle-participation-btn {{ 'cancel-btn' if is_participant else 'join-btn' }}">
                                     {% if is_participant %}Скасувати участь{% else %}Я зможу{% endif %}
@@ -255,23 +285,18 @@
             {% endif %}
         </div>
     </div>
+    
     <script>
-        function promptAndRemoveParticipant(eventId, userId) {
-            // Запит помітки у адміністратора
-            const reason = prompt(
-                "Введіть помітку/причину видалення (наприклад: 'Перенесено на інший день'):", 
-                "Перенесено на інший день"
-            );
-
-            // Якщо користувач натиснув "Скасувати" або ввів порожній рядок, виходимо
-            if (reason === null || reason.trim() === "") {
+        function removeParticipantImmediately(eventId, userId) {
+            // Підтвердження дії
+            if (!confirm("Ви впевнені, що хочете зняти цього учасника з гри? Напис буде 'Перенесено на інший день'.")) {
                 return;
             }
 
             // Створюємо форму для POST-запиту
             const form = document.createElement('form');
             form.method = 'POST';
-            // Вказуємо action на новий API-маршрут
+            // Вказуємо action на API-маршрут
             form.action = "{{ url_for('remove_participant_api', event_id=0) }}".replace('0', eventId);
             
             // Поле для ID користувача
@@ -281,13 +306,10 @@
             userIdInput.value = userId;
             form.appendChild(userIdInput);
             
-            // Поле для причини/помітки
-            const reasonInput = document.createElement('input');
-            reasonInput.type = 'hidden';
-            reasonInput.name = 'reason';
-            reasonInput.value = reason;
-            form.appendChild(reasonInput);
-
+            // Нам не потрібен reasonInput, оскільки причина фіксована на сервері,
+            // але ми залишаємо можливість, якщо сервер очікує форму.
+            // Якщо серверу не потрібен параметр 'reason', його можна не додавати.
+            
             // Додаємо форму до тіла документа і відправляємо її
             document.body.appendChild(form);
             form.submit();
