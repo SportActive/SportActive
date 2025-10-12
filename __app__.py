@@ -31,7 +31,7 @@ s = URLSafeTimedSerializer(app.secret_key)
 
 # --- Палітра кольорів для команд ---
 TEAM_COLORS_PALETTE = [
-    '#e0f7fa', '#dcedc8', '#fff9c4', '#ffcdd2', '#e1bee7', 
+    '#e0f7fa', '#dcedc8', '#fff9c4', '#ffcdd2', '#e1bee7',
     '#d1c4e9', '#c5cae9', '#bbdefb', '#b2ebf2', '#b2dfdb'
 ]
 
@@ -50,7 +50,7 @@ def utility_processor():
                 return dt_obj.strftime('%d.%m.%Y')
             except ValueError:
                 return dt_str
-    
+
     def format_date_only_for_display(date_str):
         if not date_str: return "Н/Д"
         try:
@@ -58,8 +58,8 @@ def utility_processor():
             return dt_obj.strftime('%d.%m.%Y')
         except ValueError:
             return date_str
-            
-    return dict(enumerate=enumerate, 
+
+    return dict(enumerate=enumerate,
                 format_datetime_for_display=format_datetime_for_display,
                 format_date_only_for_display=format_date_only_for_display)
 
@@ -69,15 +69,15 @@ def inject_unread_status():
         return dict(has_unread_announcements=False, has_unread_polls=False)
 
     seen_items = current_user.seen_items
-    
+
     all_announcement_ids = {a.id for a in Announcement.query.with_entities(Announcement.id).all()}
     seen_announcement_ids = set(seen_items.get('announcements', []))
     has_unread_announcements = bool(all_announcement_ids - seen_announcement_ids)
-    
+
     all_poll_ids = {p.id for p in Poll.query.with_entities(Poll.id).all()}
     seen_poll_ids = set(seen_items.get('polls', []))
     has_unread_polls = bool(all_poll_ids - seen_poll_ids)
-    
+
     return dict(has_unread_announcements=has_unread_announcements, has_unread_polls=has_unread_polls)
 
 
@@ -146,8 +146,8 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     date = db.Column(db.String(20), nullable=False)
-    image_url = db.Column(db.String(255), nullable=True, default=None) 
-    participants_json = db.Column(db.Text, default='[]') 
+    image_url = db.Column(db.String(255), nullable=True, default=None)
+    participants_json = db.Column(db.Text, default='[]')
     teams_json = db.Column(db.Text, default='{}')
     comment = db.Column(db.Text, nullable=True)
 
@@ -179,9 +179,9 @@ class EventParticipant(db.Model):
     # Зберігаємо team_name на момент запису
     team_name = db.Column(db.String(80), default=None)
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # НОВЕ: Статус для відстеження пізньої відмови або зняття адміном
-    status = db.Column(db.String(20), default='active') 
+    status = db.Column(db.String(20), default='active')
 
     user = db.relationship('User', backref=db.backref('participations', lazy='dynamic'))
     event = db.relationship('Event', backref=db.backref('real_participants', lazy='dynamic'))
@@ -728,7 +728,7 @@ def index():
 
     user_events_next_7_days = [e for e in events_with_team_info if e.is_participant]
 
-    # !!! ПЕРЕДАЧА EventParticipant У ШАБЛОН ТА КОНТРОЛЬ ВІДСТУПІВ !!!
+    # !!! ПЕРЕДАННЯ EventParticipant У ШАБЛОН ТА КОНТРОЛЬ ВІДСТУПІВ !!!
     return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month, EventParticipant=EventParticipant, RemovedParticipantLog=RemovedParticipantLog)
 
 @app.route('/add_event', methods=['GET', 'POST'])
