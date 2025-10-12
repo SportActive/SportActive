@@ -995,6 +995,37 @@ def finances():
     
     return render_template('finances.html', users=users, transactions=transactions_this_month, summary=summary, period_filter=period, current_user=current_user, paid_users_for_current_month=paid_users_for_current_month)
 
+@app.route('/announcements', methods=['GET', 'POST'])
+@login_required
+def announcements():
+    if request.method == 'POST':
+        if not current_user.is_admin():
+            flash('У вас немає дозволу на додавання оголошень.', 'error')
+            return redirect(url_for('announcements'))
+        title = request.form['title']
+        content = request.form['content']
+        if title and content:
+            author_nickname = current_user.nickname or current_user.username
+            new_announcement = Announcement(title=title, content=content, date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'), author=author_nickname)
+            db.session.add(new_announcement)
+            db.session.commit()
+            flash('Оголошення успішно додано!', 'success')
+        else:
+            flash('Будь ласка, заповніть усі поля.', 'error')
+        return redirect(url_for('announcements'))
+    
+    all_announcements = Announcement.query.order_by(Announcement.date.desc()).all()
+    seen_items = current_user.seen_items
+    seen_ids = set(seen_items.get('announcements', []))
+    ids_on_page = {a.id for a in all_announcements}
+    if not ids_on_page.issubset(seen_ids):
+        seen_ids.update(ids_on_page)
+        seen_items['announcements'] = list(seen_ids)
+        current_user.seen_items = seen_items
+        db.session.commit()
+
+    return render_template('announcements.html', announcements=all_announcements, current_user=current_user)
+
 if __name__ == '__main__':
     with app.app_context():
         # !!! ПІСЛЯ ПЕРШОГО УСПІШНОГО ЗАПУСКУ ЦЕЙ РЯДОК МАЄ БУТИ ВИДАЛЕНИЙ/ЗАКОМЕНТОВАНИЙ !!!
