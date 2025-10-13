@@ -24,19 +24,27 @@
     .fee-unpaid-status { color: #dc3545; }
 
     /* ===== НОВІ СТИЛІ ДЛЯ ЕРГОНОМІЧНОСТІ ===== */
+    .user-fees-list .data-table .td-username {
+        max-width: 150px; /* Обмежуємо ширину логіна */
+        word-break: break-all; /* Дозволяємо перенос довгих слів */
+    }
+    .user-fees-list .fee-update-row td {
+        background-color: #f8f9fa;
+        padding: 10px 15px;
+    }
     .user-fees-list .inline-form {
         display: flex;
         align-items: center;
-        gap: 5px;
+        gap: 8px;
         justify-content: flex-start;
     }
     .user-fees-list .inline-form input[type="date"],
     .user-fees-list .inline-form input[type="month"] {
-        width: 130px; /* Фіксована ширина для полів дати */
+        width: 140px;
         padding: 5px;
     }
     .user-fees-list .inline-form input[type="number"] {
-        width: 80px; /* Фіксована ширина для суми */
+        width: 90px;
         padding: 5px;
     }
 </style>
@@ -131,13 +139,12 @@
                     <th>Нікнейм</th>
                     <th>Роль</th>
                     <th>Внесок (за {{ period_filter }})</th>
-                    <th>Оновити внесок</th>
                 </tr>
             </thead>
             <tbody>
                 {% for user in users %}
                 <tr>
-                    <td>{{ user.username }}</td>
+                    <td class="td-username">{{ user.username }}</td>
                     <td>{{ user.nickname or user.username }}</td>
                     <td>
                         <form action="{{ url_for('admin.update_user_role', user_id=user.id) }}" method="POST" class="inline-form">
@@ -155,10 +162,13 @@
                             <span class="fee-unpaid-status">Не сплачено &#10007;</span>
                         {% endif %}
                     </td>
-                    <td>
+                </tr>
+                <tr class="fee-update-row">
+                    <td colspan="4">
                         <form action="{{ url_for('admin.finances', period=period_filter) }}" method="POST" class="inline-form">
                             <input type="hidden" name="form_type" value="update_user_fee">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
+                            <label><strong>Оновити внесок:</strong></label>
                             <input type="date" name="fee_date" required>
                             <input type="month" name="payment_period" value="{{ period_filter }}" required>
                             <input type="number" name="fee_amount" step="0.01" placeholder="Сума" required>
