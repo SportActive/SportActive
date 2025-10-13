@@ -14,7 +14,7 @@ admin_bp = Blueprint('admin', __name__)
 @login_required
 def finances():
     if not current_user.can_view_finances():
-        flash('У вас немає дозволу.', 'error')
+        flash('Доступ заборонено.', 'error')
         return redirect(url_for('index'))
     
     if request.method == 'POST':
@@ -142,7 +142,7 @@ def update_user_role(user_id):
 @login_required
 def announcements():
     if request.method == 'POST':
-        if not current_user.is_admin():
+        if not current_user.can_manage_events(): # Перевірка прав на створення
             flash('У вас немає дозволу.', 'error')
             return redirect(url_for('admin.announcements'))
         title = request.form['title']
@@ -172,7 +172,7 @@ def announcements():
 @admin_bp.route('/edit_announcement/<int:announcement_id>', methods=['GET', 'POST'])
 @login_required
 def edit_announcement(announcement_id):
-    if not current_user.is_admin():
+    if not current_user.can_manage_events():
         flash('У вас немає дозволу на редагування.', 'error')
         return redirect(url_for('admin.announcements'))
     announcement = Announcement.query.get_or_404(announcement_id)
@@ -187,7 +187,7 @@ def edit_announcement(announcement_id):
 @admin_bp.route('/delete_announcement/<int:announcement_id>', methods=['POST'])
 @login_required
 def delete_announcement(announcement_id):
-    if not current_user.is_admin():
+    if not current_user.can_manage_events():
         flash('У вас немає дозволу на видалення.', 'error')
         return redirect(url_for('admin.announcements'))
     announcement = Announcement.query.get_or_404(announcement_id)
@@ -200,7 +200,7 @@ def delete_announcement(announcement_id):
 @login_required
 def polls():
     if request.method == 'POST':
-        if not current_user.is_admin():
+        if not current_user.can_manage_events(): # Перевірка прав на створення
             flash('У вас немає дозволу на створення опитувань.', 'error')
             return redirect(url_for('admin.polls'))
         question = request.form['question']
@@ -263,7 +263,7 @@ def vote_poll(poll_id):
 @admin_bp.route('/delete_poll/<int:poll_id>', methods=['POST'])
 @login_required
 def delete_poll(poll_id):
-    if not current_user.is_admin():
+    if not current_user.can_manage_events():
         flash('У вас немає дозволу на видалення.', 'error')
         return redirect(url_for('admin.polls'))
     poll = Poll.query.get_or_404(poll_id)
@@ -275,8 +275,8 @@ def delete_poll(poll_id):
 @admin_bp.route('/game_log')
 @login_required
 def game_log():
-    if not current_user.is_admin():
-        flash('У вас немає дозволу на перегляд журналу подій.', 'error')
+    if not current_user.can_manage_events():
+        flash('Доступ заборонено.', 'error')
         return redirect(url_for('index'))
     period_filter = request.args.get('period', '').strip()
     query = GameLog.query

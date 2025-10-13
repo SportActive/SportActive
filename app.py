@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_
+from flask_sqlalchemy import SQLAlchemy, or_
 from flask_mail import Mail, Message
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -142,7 +141,7 @@ class EventParticipant(db.Model):
     event_id = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='CASCADE'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(20), nullable=True) # Дозволяємо NULL
+    status = db.Column(db.String(20), nullable=True)
     user = db.relationship('User', backref=db.backref('participations', lazy='dynamic'))
     event = db.relationship('Event', backref=db.backref('real_participants', lazy='dynamic', cascade='all, delete-orphan'))
 
@@ -203,10 +202,8 @@ class RemovedParticipantLog(db.Model):
     event = db.relationship('Event', foreign_keys=[event_id])
     admin = db.relationship('User', foreign_keys=[admin_id])
 
-# ===== НОВИЙ РЯДОК 1: Імпортуємо наш Blueprint =====
+# ===== РЕЄСТРАЦІЯ BLUEPRINT =====
 from admin_routes import admin_bp
-
-# ===== НОВИЙ РЯДОК 2: Реєструємо Blueprint у додатку =====
 app.register_blueprint(admin_bp)
 
 @login_manager.user_loader
