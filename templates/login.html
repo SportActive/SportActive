@@ -1,29 +1,27 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вхід - Клуб спортивних ігор</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-</head>
-<body>
-    <div class="container">
-        <h1>Вхід</h1>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}<ul class="flashes">{% for category, message in messages %}<li class="{{ category }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
-        {% endwith %}
+{% extends "base.html" %}
 
-        <form action="{{ url_for('login') }}" method="POST" class="form-narrow">
-            <input type="text" name="username" placeholder="Логін" required>
-            <input type="password" name="password" placeholder="Пароль" required>
-            <button type="submit">Увійти</button>
-        </form>
-        
-        <div style="text-align: center; margin-top: 15px;">
-            <p style="margin-bottom: 5px;">Немає облікового запису? <a href="{{ url_for('register') }}">Зареєструватися</a></p>
-            <p><a href="{{ url_for('reset_password_request') }}">Забули пароль?</a></p>
-        </div>
+{% block title %}Журнал завершених подій{% endblock %}
+
+{% block content %}
+    <h2>Журнал завершених подій</h2>
+
+    <div class="game-log-list">
+        {% if current_user.can_manage_events() %}
+            <div class="log-actions">
+                <form action="{{ url_for('admin.game_log') }}" method="GET" class="inline-form">
+                    <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
+                    <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
+                    <button type="submit" class="small-button">Фільтрувати</button>
+                </form>
+                <a href="{{ url_for('admin.export_game_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал (CSV)</a>
+            </div>
+            
+            {% if game_logs %}
+                {% else %}
+                <p>Журнал подій порожній або немає записів за вибраний період.</p>
+            {% endif %}
+        {% else %}
+            <p class="info-message">У вас немає дозволу на перегляд журналу подій.</p>
+        {% endif %}
     </div>
-</body>
-</html>
+{% endblock %}

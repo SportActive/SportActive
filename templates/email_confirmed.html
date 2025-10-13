@@ -1,28 +1,9 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Email підтверджено! - Клуб спортивних ігор</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-</head>
-<body>
-    <div class="container">
-        <h1>Email підтверджено!</h1>
+{% extends "base.html" %}
 
-        {% with messages = get_flashed_messages(with_categories=true) %}.
-          {% if messages %}
-            <ul class="flashes">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-            </ul>
-          {% endif %}
-        {% endwith %}
+{% block title %}Email підтверджено!{% endblock %}
 
-        <p class="info-message-box">Ваша електронна пошта успішно підтверджена. Тепер ви можете увійти в додаток.</p>
-        <p><a href="{{ url_for('login') }}" class="small-button">Увійти</a></p>
-    </div>
-</body>
-</html>
+{% block content %}
+    <h2>Email підтверджено!</h2>
+    <p class="info-message-box">Ваша електронна пошта успішно підтверджена. Тепер ви можете увійти в додаток.</p>
+    <p><a href="{{ url_for('login') }}" class="small-button">Увійти</a></p>
+{% endblock %}

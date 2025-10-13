@@ -1,95 +1,42 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Оголошення - Клуб спортивних ігор</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-</head>
-<body>
-    <div class="container">
-        <h1>Оголошення</h1>
+{% extends "base.html" %}
 
-        <div class="auth-links">
-            {% if current_user.is_authenticated %}
-                <p>Привіт, {{ current_user.username }}! 
-                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
-                <a href="{{ url_for('logout') }}">Вийти</a>
-            {% else %}
-                <a href="{{ url_for('login') }}">Увійти</a> | 
-                <a href="{{ url_for('register') }}">Зареєструватися</a>
-            {% endif %}
+{% block title %}Оголошення{% endblock %}
+
+{% block content %}
+    <h2>Оголошення</h2>
+
+    {% if current_user.is_authenticated and current_user.can_manage_events() %}
+        <div class="add-announcement-section form-section">
+            <h3>Додати нове оголошення</h3>
+            <form action="{{ url_for('admin.announcements') }}" method="POST" class="form-narrow">
+                <input type="text" name="title" placeholder="Заголовок оголошення" required>
+                <textarea name="content" placeholder="Текст оголошення" rows="8" required></textarea>
+                <button type="submit">Опублікувати оголошення</button>
+            </form>
         </div>
+    {% endif %}
 
-        <nav class="main-nav">
-            <a href="{{ url_for('index') }}">Події</a>
-            <a href="{{ url_for('announcements') }}">Оголошення</a>
-            <a href="{{ url_for('polls') }}">Опитування</a>
-            {% if current_user.is_authenticated and current_user.is_admin() %}
-                <div class="dropdown">
-                    <button class="dropbtn admin-action">Адміністрування ▼</button>
-                    <div class="dropdown-content">
-                        <a href="{{ url_for('add_event') }}">Додати подію</a>
-                        <a href="{{ url_for('finances') }}">Керування фінансами</a>
-                        <a href="{{ url_for('game_log') }}">Журнал подій</a>
-                    </div>
+    <div class="announcements-list">
+        <h3>Всі оголошення</h3>
+        {% if announcements %}
+            {% for ann in announcements %}
+                <div class="announcement-card">
+                    <h4>{{ ann.title }}</h4>
+                    <p class="announcement-meta">Опубліковано: {{ format_datetime_for_display(ann.date) }} від {{ ann.author }}</p>
+                    <div class="announcement-content">{{ ann.content | safe }}</div>
+
+                    {% if current_user.can_manage_events() %}
+                        <div class="admin-announcement-actions">
+                            <a href="{{ url_for('admin.edit_announcement', announcement_id=ann.id) }}" class="small-button">Редагувати</a>
+                            <form action="{{ url_for('admin.delete_announcement', announcement_id=ann.id) }}" method="POST" style="display: inline-block;">
+                                <button type="submit" class="small-button" style="background-color: #dc3545;" onclick="return confirm('Ви впевнені?');">Видалити</button>
+                            </form>
+                        </div>
+                    {% endif %}
                 </div>
-            {% endif %}
-        </nav>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <ul class="flashes">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
             {% endfor %}
-            </ul>
-          {% endif %}
-        {% endwith %}
-
-        {% if current_user.is_authenticated and current_user.is_admin() %}
-            <div class="add-announcement-section form-section">
-                <h2>Додати нове оголошення</h2>
-                <form action="{{ url_for('announcements') }}" method="POST" class="form-narrow">
-                    <input type="text" name="title" placeholder="Заголовок оголошення" required>
-                    <textarea name="content" placeholder="Текст оголошення" rows="8" required></textarea>
-                    <button type="submit">Опублікувати оголошення</button>
-                </form>
-            </div>
-        {% elif current_user.is_authenticated %}
-            <p class="info-message">Лише адміністратори можуть додавати оголошення.</p>
         {% else %}
-            <p class="info-message">Будь ласка, <a href="{{ url_for('login') }}">увійдіть</a> як адміністратор, щоб додавати оголошення.</p>
+            <p>Наразі немає оголошень.</p>
         {% endif %}
-
-
-        <div class="announcements-list">
-            <h2>Всі оголошення</h2>
-            {% if announcements %}
-                {% for ann in announcements %}
-                    <div class="announcement-card">
-                        <h3>{{ ann.title }}</h3>
-                        <p class="announcement-meta">Опубліковано: {{ format_datetime_for_display(ann.date) }} від {{ ann.author }}</p>
-                        <div class="announcement-content">{{ ann.content | safe }}</div>
-
-                        {% if current_user.is_admin() %}
-                            <div class="admin-announcement-actions">
-                                <a href="{{ url_for('edit_announcement', announcement_id=ann.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
-                                <form action="{{ url_for('delete_announcement', announcement_id=ann.id) }}" method="POST" style="display: inline-block;">
-                                    <button type="submit" class="admin-delete-event-btn small-button" onclick="return confirm('Ви впевнені, що хочете видалити це оголошення?');">Видалити</button>
-                                </form>
-                            </div>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            {% else %}
-                <p>Наразі немає оголошень.</p>
-                {% if current_user.is_authenticated and current_user.is_admin() %}
-                    <p>Будь ласка, <a href="{{ url_for('announcements') }}">додайте перше оголошення</a>.</p>
-                {% endif %}
-            {% endif %}
-        </div>
     </div>
-</body>
-</html>
+{% endblock %}

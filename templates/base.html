@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Активно-спортивні ми{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    {% block head_extra %}{% endblock %} {# Для додаткових стилів на окремих сторінках #}
+</head>
+<body>
+    <div class="container">
+        <h1 class="main-title">Активно-спортивні ми</h1>
+        <div class="auth-links">
+            {% if current_user.is_authenticated %}
+                <p>Привіт, {{ current_user.nickname or current_user.username }}! {% if current_user.is_admin() %}<span class="badge admin-badge">Адмін</span>{% endif %}</p>
+                <nav class="user-nav">
+                    <a href="{{ url_for('index') }}">Події</a>
+                    <a href="{{ url_for('admin.announcements') }}" class="nav-link {% if has_unread_announcements %}unread{% endif %}">Оголошення</a>
+                    <a href="{{ url_for('admin.polls') }}" class="nav-link {% if has_unread_polls %}unread{% endif %}">Опитування</a>
+                    {% if current_user.can_manage_events() %}
+                        <div class="dropdown">
+                            <button class="dropbtn admin-action">Адміністрування ▼</button>
+                            <div class="dropdown-content">
+                                <a href="{{ url_for('add_event') }}">Додати подію</a>
+                                <a href="{{ url_for('admin.finances') }}">Керування фінансами</a>
+                                <a href="{{ url_for('admin.game_log') }}">Журнал подій</a>
+                                {# <a href="{{ url_for('admin.fee_log') }}">Журнал оплат</a> #} {# Розкоментуйте, коли ця функція буде готова #}
+                            </div>
+                        </div>
+                    {% endif %}
+                    <a href="{{ url_for('logout') }}" class="nav-link logout-link">Вийти</a>
+                </nav>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="nav-link">Увійти</a> | <a href="{{ url_for('register') }}" class="nav-link">Реєстрація</a>
+            {% endif %}
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-messages">
+            {% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}
+        </div>{% endif %}{% endwith %}
+
+        {% block content %}{% endblock %}
+
+    </div>
+</body>
+</html>

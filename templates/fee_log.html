@@ -1,91 +1,27 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Журнал оплат - Клуб спортивних ігор</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-</head>
-<body>
-    <div class="container">
-        <h1>Журнал оплат</h1>
+{% extends "base.html" %}
 
-        <div class="auth-links">
-            {% if current_user.is_authenticated %}
-                <p>Привіт, {{ current_user.username }}! 
-                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
-                <a href="{{ url_for('logout') }}">Вийти</a>
-            {% else %}
-                <a href="{{ url_for('login') }}">Увійти</a> | 
-                <a href="{{ url_for('register') }}">Зареєструватися</a>
-            {% endif %}
-        </div>
+{% block title %}Журнал оплат{% endblock %}
 
-        <nav class="main-nav">
-            <a href="{{ url_for('index') }}">Події</a>
-            <a href="{{ url_for('announcements') }}">Оголошення</a>
-            <a href="{{ url_for('polls') }}">Опитування</a>
-            {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="{{ url_for('finances') }}" class="admin-action">Керувати внесками</a>
-                <a href="{{ url_for('game_log') }}" class="admin-action">Журнал подій</a>
-                <a href="{{ url_for('fee_log') }}" class="admin-action">Журнал оплат</a>
-            {% endif %}
-        </nav>
+{% block content %}
+    <h2>Журнал оплат</h2>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <ul class="flashes">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-            </ul>
-          {% endif %}
-        {% endwith %}
-
-        <div class="fee-log-list">
-            {% if current_user.is_admin() %}
-                <div class="log-actions">
-                    {# Форма фільтрації за періодом #}
-                    <form action="{{ url_for('fee_log') }}" method="GET" class="inline-form fee-filter-form">
-                        <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
-                        <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
-                        <button type="submit" class="small-button">Фільтрувати</button>
-                    </form>
-                    {# Кнопка експорту (тепер може включати фільтр) #}
-                    <a href="{{ url_for('export_fee_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал (CSV)</a>
-                </div>
-                
-                {% if fee_logs %}
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Користувач</th>
-                                <th>Дата оплати</th>
-                                <th>Період розрахунків</th>
-                                <th>Хто відмітив</th>
-                                <th>Час логування</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for log in fee_logs %}
-                                <tr>
-                                    <td>{{ log.username }}</td>
-                                    <td>{{ format_date_only_for_display(log.payment_date) }}</td>
-                                    <td>{{ log.payment_period if log.payment_period else 'Н/Д' }}</td>
-                                    <td>{{ log.logged_by_admin }}</td>
-                                    <td>{{ format_datetime_for_display(log.logged_at) }}</td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+    <div class="fee-log-list">
+        {% if current_user.can_manage_events() %}
+            <div class="log-actions">
+                <form action="{{ url_for('admin.fee_log') }}" method="GET" class="inline-form fee-filter-form">
+                    <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
+                    <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
+                    <button type="submit" class="small-button">Фільтрувати</button>
+                </form>
+                <a href="{{ url_for('admin.export_fee_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал (CSV)</a>
+            </div>
+            
+            {% if fee_logs %}
                 {% else %}
-                    <p>Журнал оплат порожній або немає записів за вибраний період.</p>
-                {% endif %}
-            {% else %}
-                <p class="info-message">У вас немає дозволу на перегляд журналу оплат.</p>
+                <p>Журнал оплат порожній або немає записів за вибраний період.</p>
             {% endif %}
-        </div>
+        {% else %}
+            <p class="info-message">У вас немає дозволу на перегляд журналу оплат.</p>
+        {% endif %}
     </div>
-</body>
-</html>
+{% endblock %}

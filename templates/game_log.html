@@ -1,121 +1,27 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Журнал подій - Клуб спортивних ігор</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-</head>
-<body>
-    <div class="container">
-        <h1>Журнал завершених подій</h1>
+{% extends "base.html" %}
 
-        <div class="auth-links">
-            {% if current_user.is_authenticated %}
-                <p>Привіт, {{ current_user.username }}! 
-                {% if current_user.is_admin() %}<span class="admin-label">(Адміністратор)</span>{% endif %}</p>
-                <a href="{{ url_for('logout') }}">Вийти</a>
-            {% else %}
-                <a href="{{ url_for('login') }}">Увійти</a> | 
-                <a href="{{ url_for('register') }}">Зареєструватися</a>
-            {% endif %}
-        </div>
+{% block title %}Журнал завершених подій{% endblock %}
 
-        <nav class="main-nav">
-            <a href="{{ url_for('index') }}">Події</a>
-            <a href="{{ url_for('announcements') }}">Оголошення</a>
-            <a href="{{ url_for('polls') }}">Опитування</a>
-            {% if current_user.is_authenticated and current_user.is_admin() %}
-                <div class="dropdown">
-                    <button class="dropbtn admin-action">Адміністрування ▼</button>
-                    <div class="dropdown-content">
-                        <a href="{{ url_for('add_event') }}">Додати подію</a>
-                        <a href="{{ url_for('finances') }}">Керування фінансами</a>
-                        <a href="{{ url_for('game_log') }}">Журнал подій</a>
-                    </div>
-                </div>
-            {% endif %}
-        </nav>
+{% block content %}
+    <h2>Журнал завершених подій</h2>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <ul class="flashes">
-            {% for category, message in messages %}
-              <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-            </ul>
-          {% endif %}
-        {% endwith %}
-
-        <div class="game-log-list">
-            {% if current_user.is_admin() %}
-                <div class="log-actions">
-                    <form action="{{ url_for('game_log') }}" method="GET" class="inline-form fee-filter-form">
-                        <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
-                        <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
-                        <button type="submit" class="small-button">Фільтрувати</button>
-                    </form>
-                    <a href="{{ url_for('export_game_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал подій (CSV)</a>
-                </div>
-                
-                {% if game_logs %}
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Подія</th>
-                                <th>Дата</th>
-                                <th>Коментар</th>
-                                <th>Учасники (активні)</th>
-                                <th>Учасники (відмовилися)</th>
-                                <th>Команди</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for log in game_logs %}
-                                <tr>
-                                    <td>
-                                        {{ log.event_name }}
-                                        {% if log.image_url %}<img src="{{ log.image_url }}" alt="Зображення події" class="log-event-image">{% endif %}
-                                    </td>
-                                    <td>{{ format_datetime_for_display(log.event_date) }}</td>
-                                    <td>{{ log.comment if log.comment else 'Н/Д' }}</td>
-                                    <td>
-                                        {% if log.active_participants %}
-                                            {{ log.active_participants | join(', ') }}
-                                        {% else %}
-                                            Н/Д
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if log.cancelled_participants %}
-                                            {{ log.cancelled_participants | join(', ') }}
-                                        {% else %}
-                                            Н/Д
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if log.teams %}
-                                            <ul>
-                                            {% for team_name, members in log.teams.items() %}
-                                                <li><strong>{{ team_name }}:</strong> {{ members | join(', ') }}</li>
-                                            {% endfor %}
-                                            </ul>
-                                        {% else %}
-                                            Н/Д
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+    <div class="game-log-list">
+        {% if current_user.can_manage_events() %}
+            <div class="log-actions">
+                <form action="{{ url_for('admin.game_log') }}" method="GET" class="inline-form">
+                    <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
+                    <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
+                    <button type="submit" class="small-button">Фільтрувати</button>
+                </form>
+                <a href="{{ url_for('admin.export_game_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал (CSV)</a>
+            </div>
+            
+            {% if game_logs %}
                 {% else %}
-                    <p>Журнал подій порожній або немає записів за вибраний період.</p>
-                {% endif %}
-            {% else %}
-                <p class="info-message">У вас немає дозволу на перегляд журналу подій.</p>
+                <p>Журнал подій порожній або немає записів за вибраний період.</p>
             {% endif %}
-        </div>
+        {% else %}
+            <p class="info-message">У вас немає дозволу на перегляд журналу подій.</p>
+        {% endif %}
     </div>
-</body>
-</html>
+{% endblock %}
