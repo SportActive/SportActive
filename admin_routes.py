@@ -1,14 +1,22 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, make_response
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 from sqlalchemy import func
 import json
+import csv
+from io import StringIO
 
-# Імпортуємо 'db' та моделі з нашого основного файлу app.py
-from app import db, FinancialTransaction, Announcement, Poll, GameLog, User
+# ===== ЗМІНА: Імпортуємо з models.py =====
+from models import db, FinancialTransaction, Announcement, Poll, GameLog, User
 
-# Створюємо Blueprint з назвою 'admin'
 admin_bp = Blueprint('admin', __name__)
+
+# ... (ВЕСЬ КОД ФАЙЛУ admin_routes.py, ЯКИЙ Я НАДАВАВ РАНІШЕ, ЗАЛИШАЄТЬСЯ ТУТ БЕЗ ЗМІН) ...
+# ... (Від @admin_bp.route('/finances'...) до кінця файлу)
+
+
+
 
 @admin_bp.route('/finances', methods=['GET', 'POST'])
 @login_required
