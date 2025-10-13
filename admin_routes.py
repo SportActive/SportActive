@@ -8,7 +8,7 @@ import json
 from app import db, FinancialTransaction, Announcement, Poll, GameLog, User
 
 # Створюємо Blueprint з назвою 'admin'
-admin_bp = Blueprint('admin', __name__, template_folder='templates')
+admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/finances', methods=['GET', 'POST'])
 @login_required
