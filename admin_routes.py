@@ -6,7 +6,7 @@ import json
 import csv
 from io import StringIO
 
-# ===== ЗМІНА: Імпортуємо з models.py =====
+# ===== Імпортуємо з models.py =====
 from models import db, FinancialTransaction, Announcement, Poll, GameLog, User
 
 admin_bp = Blueprint('admin', __name__)
@@ -90,6 +90,42 @@ def finances():
     
     return render_template('finances.html', users=users, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month)
 
+# ===== НОВА ДОДАНА ФУНКЦІЯ =====
+@admin_bp.route('/export_finances')
+@login_required
+def export_finances():
+    if not current_user.can_view_finances():
+        flash('У вас немає дозволу на експорт.', 'error')
+        return redirect(url_for('admin.finances'))
+
+    period_filter = request.args.get('period', '').strip()
+    query = FinancialTransaction.query
+
+    if period_filter:
+        query = query.filter(FinancialTransaction.date.like(f"{period_filter}%"))
+    
+    transactions = query.order_by(FinancialTransaction.date.asc()).all()
+
+    si = StringIO()
+    cw = csv.writer(si)
+    cw.writerow(["Дата", "Опис", "Тип", "Сума", "Хто додав", "Час додавання"])
+    for t in transactions:
+        row = [
+            t.date, 
+            t.description, 
+            "Надходження" if t.transaction_type == 'income' else "Витрата", 
+            t.amount, 
+            t.logged_by_admin, 
+            t.logged_at
+        ]
+        cw.writerow(row)
+
+    output = si.getvalue()
+    filename = f"finances_{period_filter or 'all'}.csv"
+    response = make_response(output)
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
+    return response
 
 @admin_bp.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
 @login_required
@@ -149,7 +185,7 @@ def update_user_role(user_id):
 @login_required
 def announcements():
     if request.method == 'POST':
-        if not current_user.can_manage_events(): # Перевірка прав на створення
+        if not current_user.can_manage_events():
             flash('У вас немає дозволу.', 'error')
             return redirect(url_for('admin.announcements'))
         title = request.form['title']
@@ -207,7 +243,7 @@ def delete_announcement(announcement_id):
 @login_required
 def polls():
     if request.method == 'POST':
-        if not current_user.can_manage_events(): # Перевірка прав на створення
+        if not current_user.can_manage_events():
             flash('У вас немає дозволу на створення опитувань.', 'error')
             return redirect(url_for('admin.polls'))
         question = request.form['question']
@@ -299,7 +335,7 @@ def fee_log():
         flash('Доступ заборонено.', 'error')
         return redirect(url_for('index'))
 
-    period_filter = request.args.get('period', '') # За замовчуванням - порожній рядок
+    period_filter = request.args.get('period', '')
     query = FinancialTransaction.query.filter(FinancialTransaction.description.like('Членський внесок%'))
 
     if period_filter:
