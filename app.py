@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import json
 import csv
 from io import StringIO
-from sqlalchemy import func
+from sqlalchemy import func, text
 import itertools
 from itsdangerous import URLSafeTimedSerializer
 import logging
@@ -40,16 +40,12 @@ def utility_processor():
     def format_datetime_for_display(dt_str):
         if not dt_str: return "Н/Д"
         try:
-            dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+            dt_obj = datetime.strptime(str(dt_str), '%Y-%m-%d %H:%M:%S')
             days_of_week_full = ["Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота", "Неділя"]
             day_name = days_of_week_full[dt_obj.weekday()]
             return dt_obj.strftime(f'{day_name}, %d.%m.%Y %H:%M')
         except ValueError:
-            try:
-                dt_obj = datetime.strptime(dt_str, '%Y-%m-%d')
-                return dt_obj.strftime('%d.%m.%Y')
-            except ValueError:
-                return dt_str
+            return str(dt_str)
 
     def format_date_only_for_display(date_str):
         if not date_str: return "Н/Д"
@@ -269,6 +265,40 @@ class RemovedParticipantLog(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+# --- Функция инициализации БД с автомиграцией ---
+def init_database():
+    """Инициализация и миграция базы данных"""
+    with app.app_context():
+        try:
+            db.create_all()
+            
+            # Проверяем и добавляем отсутствующие колонки
+            with db.engine.connect() as connection:
+                # Проверяем наличие max_participants
+                check_column = text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='event' AND column_name='max_participants';
+                """)
+                result = connection.execute(check_column)
+                exists = result.fetchone()
+                
+                if not exists:
+                    app.logger.info("Добавление колонки max_participants в таблицу event...")
+                    alter_table = text("ALTER TABLE event ADD COLUMN max_participants INTEGER;")
+                    connection.execute(alter_table)
+                    connection.commit()
+                    app.logger.info("✓ Колонка max_participants добавлена")
+                else:
+                    app.logger.info("✓ Колонка max_participants существует")
+                    
+        except Exception as e:
+            app.logger.error(f"Ошибка при инициализации БД: {e}")
+
+# Инициализируем БД при импорте модуля
+init_database()
 
 
 # --- Маршруты для аутентификации ---
@@ -618,7 +648,7 @@ def index():
 
         events_with_team_info.append(event)
 
-    user_events_next_7_days = [e for e in events_with_team_info if e.is_participant]
+    user_events_next_7_days = [e for e in events_with_team_info if e.is_participant] if current_user.is_authenticated else []
     return render_template('index.html', events=events_with_team_info, current_user=current_user, user_nicknames=user_nicknames, user_events_next_7_days=user_events_next_7_days, paid_users_for_current_month=paid_users_for_current_month, EventParticipant=EventParticipant, RemovedParticipantLog=RemovedParticipantLog)
 
 @app.route('/add_event', methods=['GET', 'POST'])
@@ -1070,6 +1100,4 @@ def update_user_role(user_id):
     return redirect(url_for('finances'))
 
 if __name__ == '__main__':
-    with app.app_context():
-        pass
     app.run(debug=True)

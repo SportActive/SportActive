@@ -32,7 +32,6 @@
             {% if current_user.is_authenticated %}
                 <p>Привіт, {{ current_user.nickname or current_user.username }}!
                 {% if current_user.is_admin() %}<span class="badge admin-badge">Адмін</span>{% endif %}
-                {% if current_user.is_superuser() %}<span class="badge superuser-badge">Суперадмін</span>{% endif %}
                 </p>
                 <nav class="user-nav">
                     {% if current_user.can_view_finances() %}<a href="{{ url_for('finances') }}" class="nav-link">Фінанси</a>{% endif %}
@@ -60,28 +59,15 @@
             {% for event in events %}
                 <div class="event-card" id="event-{{ event.id }}">
                     <h2 class="event-title">{{ event.name }} <span class="event-date">{{ format_datetime_for_display(event.date) }}</span></h2>
-                    {% if event.image_url %}<img src="{{ event.image_url }}" alt="Зображення події" class="event-image">{% endif %}
                     {% if event.comment %}<p class="event-comment">{{ event.comment | safe }}</p>{% endif %}
-                    <div class="teams-container">
-                        {% for team_name, members in event.teams.items() %}
-                            <div class="team-block" style="background-color: {{ event.team_colors.get(team_name, '#e9ecef') }};">
-                                <h4 class="team-name-badge">{{ team_name }}</h4>
-                                <ul class="team-members">
-                                    {% for member_username in members %}<li>{{ user_nicknames.get(member_username, member_username) }}</li>{% endfor %}
-                                </ul>
-                            </div>
-                        {% endfor %}
-                    </div>
+                    
                     <p>Учасників: <strong>{{ event.active_participants_count }}</strong>{% if event.max_participants %} / {{ event.max_participants }}{% endif %}</p>
                     <h4>Список учасників:</h4>
                     <ul>
                         {% for p_entry in event.processed_participants %}
                             <li class="participant-row">
                                 <span class="participant-info-group">
-                                    <span class="participant-name">{{ p_entry.nickname }}
-                                        {% if p_entry.username in paid_users_for_current_month %}<span class="fee-paid-badge" title="Внесок за поточний місяць сплачено">&#10003;</span>{% endif %}
-                                    </span>
-                                    {% if p_entry.assigned_team_name %}<span class="team-badge" style="background-color: {{ event.team_colors.get(p_entry.assigned_team_name, '#e9ecef') }};">{{ p_entry.assigned_team_name }}</span>{% endif %}
+                                    <span class="participant-name">{{ p_entry.nickname }}</span>
                                     <span class="participation-info">(Запис: {{ format_datetime_for_display(p_entry.timestamp) }}
                                         {% if p_entry.status == 'refused' %}<span class="cancelled-badge refused-status">Відмовився</span>
                                         {% elif p_entry.status == 'removed' %}<span class="cancelled-badge removed-status">Знятий адміном</span>{% endif %}
@@ -95,19 +81,17 @@
                                                 Тиждень: <strong>{{ p_entry.stats.weekly_count }}</strong>, 30 днів: <strong>{{ p_entry.stats.monthly_count }}</strong>
                                             </span>
                                         {% endif %}
-
-                                        {% if p_entry.user_id != current_user.id %}
-                                            <form action="{{ url_for('admin_toggle_participant_status', event_id=event.id, user_id=p_entry.user_id) }}" method="POST" style="display: inline;">
-                                                {% if p_entry.status == 'active' %}
-                                                    <button type="submit" class="remove-participant-btn" title="Зняти учасника з гри">Зняти</button>
-                                                {% elif p_entry.status in ['removed', 'refused'] %}
-                                                    <button type="submit" class="button join-button small-button" style="background-color: #28a745;" title="Повернути учасника в гру">Повернути</button>
-                                                {% endif %}
-                                            </form>
-                                        {% endif %}
+                                        
+                                        <form action="{{ url_for('admin_toggle_participant_status', event_id=event.id, user_id=p_entry.user_id) }}" method="POST" style="display: inline;">
+                                            {% if p_entry.status == 'active' %}
+                                                <button type="submit" class="remove-participant-btn" title="Зняти учасника з гри">Зняти</button>
+                                            {% elif p_entry.status in ['removed', 'refused'] %}
+                                                <button type="submit" class="button join-button small-button" style="background-color: #28a745;" title="Повернути учасника в гру">Повернути</button>
+                                            {% endif %}
+                                        </form>
                                     </span>
                                 {% endif %}
-                                </li>
+                            </li>
                         {% else %}
                             <li>Поки що ніхто не зареєструвався.</li>
                         {% endfor %}
@@ -131,10 +115,8 @@
                         {% if current_user.can_manage_events() %}
                             <div class="admin-event-actions">
                                 <a href="{{ url_for('manage_teams', event_id=event.id) }}" class="admin-manage-teams-link small-button">Керувати командами</a>
-                                {% if current_user.is_admin() %}
-                                    <a href="{{ url_for('edit_event', event_id=event.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
-                                    <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;"><button type="submit" class="admin-delete-event-btn small-button" onclick="return confirm('Ви впевнені?');">Видалити</button></form>
-                                {% endif %}
+                                <a href="{{ url_for('edit_event', event_id=event.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
+                                <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;"><button type="submit" class="admin-delete-event-btn small-button" onclick="return confirm('Ви впевнені?');">Видалити</button></form>
                             </div>
                         {% endif %}
                     {% else %}
@@ -146,8 +128,5 @@
             {% endfor %}
         </div>
     </div>
-    <script>
-        // JavaScript больше не нужен для этой функциональности.
-    </script>
 </body>
 </html>
