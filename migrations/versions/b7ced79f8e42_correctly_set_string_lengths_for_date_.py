@@ -1,8 +1,8 @@
-"""Increase GameLog.event_date length
+"""Correctly set string lengths for date columns
 
-Revision ID: 7655e117fe90
+Revision ID: b7ced79f8e42
 Revises: 13563c8841e5
-Create Date: 2025-10-14 01:01:55.184420
+Create Date: 2025-10-14 01:41:05.438380
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '7655e117fe90'
+revision: str = 'b7ced79f8e42'
 down_revision: Union[str, Sequence[str], None] = '13563c8841e5'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -40,8 +40,8 @@ def upgrade() -> None:
                existing_nullable=False)
         batch_op.alter_column('logged_at',
                existing_type=sa.VARCHAR(length=20),
-               type_=sa.DateTime(),
-               existing_nullable=True)
+               type_=sa.String(length=30),
+               nullable=False)
         batch_op.drop_column('image_url')
 
     with op.batch_alter_table('user', schema=None) as batch_op:
@@ -61,9 +61,9 @@ def downgrade() -> None:
     with op.batch_alter_table('game_log', schema=None) as batch_op:
         batch_op.add_column(sa.Column('image_url', sa.VARCHAR(length=255), autoincrement=False, nullable=True))
         batch_op.alter_column('logged_at',
-               existing_type=sa.DateTime(),
+               existing_type=sa.String(length=30),
                type_=sa.VARCHAR(length=20),
-               existing_nullable=True)
+               nullable=True)
         batch_op.alter_column('event_date',
                existing_type=sa.String(length=30),
                type_=sa.VARCHAR(length=20),

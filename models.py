@@ -80,8 +80,9 @@ class EventParticipant(db.Model):
 class GameLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event_name = db.Column(db.String(100), nullable=False)
-    event_date = db.Column(db.String(30), nullable=False) # Збільшена довжина
-    logged_at = db.Column(db.DateTime, default=datetime.utcnow)
+    event_date = db.Column(db.String(30), nullable=False)
+    logged_at = db.Column(db.String(30), nullable=False, default=lambda: datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+   #logged_at = db.Column(db.DateTime, default=datetime.utcnow)
     active_participants_json = db.Column(db.Text, default='[]')
     cancelled_participants_json = db.Column(db.Text, default='[]')
     teams_json = db.Column(db.Text, default='{}')

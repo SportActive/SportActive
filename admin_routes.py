@@ -1,4 +1,3 @@
-
 from flask import Blueprint, render_template, request, redirect, url_for, flash, make_response
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
@@ -11,12 +10,6 @@ from io import StringIO
 from models import db, FinancialTransaction, Announcement, Poll, GameLog, User
 
 admin_bp = Blueprint('admin', __name__)
-
-# ... (ВЕСЬ КОД ФАЙЛУ admin_routes.py, ЯКИЙ Я НАДАВАВ РАНІШЕ, ЗАЛИШАЄТЬСЯ ТУТ БЕЗ ЗМІН) ...
-# ... (Від @admin_bp.route('/finances'...) до кінця файлу)
-
-
-
 
 @admin_bp.route('/finances', methods=['GET', 'POST'])
 @login_required
@@ -150,7 +143,7 @@ def update_user_role(user_id):
 @login_required
 def announcements():
     if request.method == 'POST':
-        if not current_user.can_manage_events(): # Перевірка прав на створення
+        if not current_user.can_manage_events():
             flash('У вас немає дозволу.', 'error')
             return redirect(url_for('admin.announcements'))
         title = request.form['title']
@@ -208,7 +201,7 @@ def delete_announcement(announcement_id):
 @login_required
 def polls():
     if request.method == 'POST':
-        if not current_user.can_manage_events(): # Перевірка прав на створення
+        if not current_user.can_manage_events():
             flash('У вас немає дозволу на створення опитувань.', 'error')
             return redirect(url_for('admin.polls'))
         question = request.form['question']
@@ -292,3 +285,80 @@ def game_log():
         query = query.filter(GameLog.event_date.like(f"{period_filter}%"))
     game_logs = query.order_by(GameLog.logged_at.desc()).all()
     return render_template('game_log.html', game_logs=game_logs, period_filter=period_filter)
+
+@admin_bp.route('/fee_log')
+@login_required
+def fee_log():
+    if not current_user.can_manage_events():
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('index'))
+
+    period_filter = request.args.get('period', '').strip()
+    query = FinancialTransaction.query.filter(FinancialTransaction.description.like('Членський внесок%'))
+
+    if period_filter:
+        query = query.filter(FinancialTransaction.date.like(f"{period_filter}%"))
+
+    transactions = query.order_by(FinancialTransaction.date.desc()).all()
+
+    fee_logs_for_template = []
+    for t in transactions:
+        try:
+            parts = t.description.split(' від ')
+            username = parts[1] if len(parts) > 1 else 'N/A'
+            period_part = t.description.split('(')[1].split(')')[0]
+        except IndexError:
+            username = "Не вдалося розпізнати"
+            period_part = "Не вдалося розпізнати"
+
+        fee_logs_for_template.append({
+            'username': username,
+            'payment_date': t.date,
+            'payment_period': period_part,
+            'logged_by_admin': t.logged_by_admin,
+            'logged_at': t.logged_at
+        })
+
+    return render_template('fee_log.html', fee_logs=fee_logs_for_template, period_filter=period_filter)
+
+@admin_bp.route('/export_fee_log')
+@login_required
+def export_fee_log():
+    if not current_user.can_manage_events():
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('index'))
+
+    period_filter = request.args.get('period', '').strip()
+    query = FinancialTransaction.query.filter(FinancialTransaction.description.like('Членський внесок%'))
+
+    if period_filter:
+        query = query.filter(FinancialTransaction.date.like(f"{period_filter}%"))
+    
+    transactions = query.order_by(FinancialTransaction.date.desc()).all()
+
+    si = StringIO()
+    cw = csv.writer(si)
+    cw.writerow(["Користувач", "Дата оплати", "Період розрахунків", "Хто відмітив", "Час логування"])
+
+    for t in transactions:
+        try:
+            username = t.description.split(' від ')[1]
+            payment_period = t.description.split('(')[1].split(')')[0]
+        except IndexError:
+            username = "N/A"
+            payment_period = "N/A"
+        
+        row = [
+            username, 
+            t.date, 
+            payment_period, 
+            t.logged_by_admin, 
+            t.logged_at.strftime('%Y-%m-%d %H:%M:%S') if t.logged_at else ''
+        ]
+        cw.writerow(row)
+
+    output = si.getvalue()
+    response = make_response(output)
+    response.headers["Content-Disposition"] = f"attachment; filename=fee_log_{period_filter or 'all'}.csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
+    return response

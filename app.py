@@ -380,7 +380,7 @@ def edit_event(event_id):
         except ValueError:
             flash('Неправильний формат дати.', 'error')
     try:
-        dt_object = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+        dt_object = datetime.strptime(event.date, '%Y-%м-%d %H:%M:%S')
         event.formatted_datetime_local = dt_object.strftime('%Y-%m-%dT%H:%M')
     except ValueError:
         event.formatted_datetime_local = ''
