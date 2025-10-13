@@ -33,7 +33,7 @@ def finances():
                     amount=-amount if trans_type == 'expense' else amount,
                     transaction_type=trans_type,
                     logged_by_admin=current_user.username,
-                    logged_at=datetime.utcnow()
+                    logged_at=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
                 )
                 db.session.add(new_transaction)
                 db.session.commit()
@@ -53,7 +53,7 @@ def finances():
                         amount=fee_amount,
                         transaction_type='income',
                         logged_by_admin=current_user.nickname or current_user.username,
-                        logged_at=datetime.utcnow()
+                        logged_at=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
                     )
                     db.session.add(new_fee)
                     db.session.commit()
@@ -62,17 +62,21 @@ def finances():
                     flash('Невірний формат суми внеску.', 'error')
         return redirect(url_for('admin.finances', period=request.args.get('period', '')))
 
-    period = request.args.get('period', datetime.now().strftime('%Y-%m'))
-    try:
-        start_of_month = datetime.strptime(period, '%Y-%m')
-    except ValueError:
-        period = datetime.now().strftime('%Y-%m')
-        start_of_month = datetime.strptime(period, '%Y-%m')
-        
-    end_of_month = (start_of_month.replace(day=28) + timedelta(days=4)).replace(day=1)
+    period = request.args.get('period', '') 
+    query = FinancialTransaction.query
+    start_balance = 0.0
     
-    start_balance = db.session.query(func.sum(FinancialTransaction.amount)).filter(FinancialTransaction.date < start_of_month.strftime('%Y-%m-%d')).scalar() or 0.0
-    transactions = FinancialTransaction.query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'), FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d')).order_by(FinancialTransaction.date.desc()).all()
+    if period: 
+        try:
+            start_of_month = datetime.strptime(period, '%Y-%m')
+            end_of_month = (start_of_month.replace(day=28) + timedelta(days=4)).replace(day=1)
+            query = query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'), FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d'))
+            start_balance = db.session.query(func.sum(FinancialTransaction.amount)).filter(FinancialTransaction.date < start_of_month.strftime('%Y-%m-%d')).scalar() or 0.0
+        except ValueError:
+            flash('Неправильний формат періоду.', 'warning')
+            period = '' 
+    
+    transactions = query.order_by(FinancialTransaction.date.desc()).all()
     
     total_income = sum(t.amount for t in transactions if t.transaction_type == 'income')
     total_expenses = sum(t.amount for t in transactions if t.transaction_type == 'expense')
@@ -81,9 +85,11 @@ def finances():
     summary = {'start_balance': round(start_balance, 2), 'total_income': round(total_income, 2), 'total_expenses': round(abs(total_expenses), 2), 'end_balance': round(end_balance, 2)}
     users = User.query.order_by(User.username).all()
     
-    paid_users_for_period = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({period})%")).all() if ' від ' in t.description}
+    current_month_str = datetime.now().strftime('%Y-%m')
+    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all() if ' від ' in t.description}
     
-    return render_template('finances.html', users=users, transactions=transactions, summary=summary, period_filter=period, paid_users_for_period=paid_users_for_period)
+    return render_template('finances.html', users=users, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month)
+
 
 @admin_bp.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
 @login_required
@@ -143,7 +149,7 @@ def update_user_role(user_id):
 @login_required
 def announcements():
     if request.method == 'POST':
-        if not current_user.can_manage_events():
+        if not current_user.can_manage_events(): # Перевірка прав на створення
             flash('У вас немає дозволу.', 'error')
             return redirect(url_for('admin.announcements'))
         title = request.form['title']
@@ -201,7 +207,7 @@ def delete_announcement(announcement_id):
 @login_required
 def polls():
     if request.method == 'POST':
-        if not current_user.can_manage_events():
+        if not current_user.can_manage_events(): # Перевірка прав на створення
             flash('У вас немає дозволу на створення опитувань.', 'error')
             return redirect(url_for('admin.polls'))
         question = request.form['question']
@@ -293,7 +299,7 @@ def fee_log():
         flash('Доступ заборонено.', 'error')
         return redirect(url_for('index'))
 
-    period_filter = request.args.get('period', '').strip()
+    period_filter = request.args.get('period', '') # За замовчуванням - порожній рядок
     query = FinancialTransaction.query.filter(FinancialTransaction.description.like('Членський внесок%'))
 
     if period_filter:
@@ -353,7 +359,7 @@ def export_fee_log():
             t.date, 
             payment_period, 
             t.logged_by_admin, 
-            t.logged_at.strftime('%Y-%m-%d %H:%M:%S') if t.logged_at else ''
+            t.logged_at
         ]
         cw.writerow(row)
 

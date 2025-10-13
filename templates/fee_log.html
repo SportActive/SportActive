@@ -17,7 +17,29 @@
             </div>
             
             {% if fee_logs %}
-                {% else %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Користувач</th>
+                            <th>Дата оплати</th>
+                            <th>Період розрахунків</th>
+                            <th>Хто відмітив</th>
+                            <th>Час запису</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in fee_logs %}
+                        <tr>
+                            <td>{{ log.username }}</td>
+                            <td>{{ log.payment_date }}</td>
+                            <td>{{ log.payment_period }}</td>
+                            <td>{{ log.logged_by_admin }}</td>
+                            <td>{{ format_datetime_for_display(log.logged_at) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
                 <p>Журнал оплат порожній або немає записів за вибраний період.</p>
             {% endif %}
         {% else %}

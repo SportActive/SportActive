@@ -1,27 +1,80 @@
 {% extends "base.html" %}
 
-{% block title %}Журнал оплат{% endblock %}
+{% block title %}Керування фінансами{% endblock %}
+
+{% block head_extra %}
+<style>
+    .summary-card { background-color: #f8fbfd; border: 1px solid #e0e9f0; border-radius: 10px; padding: 20px; margin-bottom: 30px; display: flex; justify-content: space-around; flex-wrap: wrap; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    .summary-item { padding: 10px; flex-grow: 1; min-width: 180px;}
+    .summary-item h4 { margin: 0 0 10px 0; color: #4a698a; font-size: 1.1em; font-weight: 600; text-transform: uppercase;}
+    .summary-item p { margin: 0; font-size: 1.8em; font-weight: 700; }
+    .income { color: #28a745; }
+    .expense { color: #dc3545; }
+    .balance { color: #007bff; }
+</style>
+{% endblock %}
 
 {% block content %}
-    <h2>Журнал оплат</h2>
+    <h2>Керування фінансами</h2>
 
-    <div class="fee-log-list">
-        {% if current_user.can_manage_events() %}
-            <div class="log-actions">
-                <form action="{{ url_for('admin.fee_log') }}" method="GET" class="inline-form fee-filter-form">
-                    <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
-                    <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
-                    <button type="submit" class="small-button">Фільтрувати</button>
-                </form>
-                <a href="{{ url_for('admin.export_fee_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал (CSV)</a>
-            </div>
-            
-            {% if fee_logs %}
-                {% else %}
-                <p>Журнал оплат порожній або немає записів за вибраний період.</p>
-            {% endif %}
-        {% else %}
-            <p class="info-message">У вас немає дозволу на перегляд журналу оплат.</p>
-        {% endif %}
+    <div class="log-actions">
+        <form action="{{ url_for('admin.finances') }}" method="GET" class="inline-form">
+            <label for="period_filter">Показати звіт за місяць:</label>
+            <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
+            <button type="submit" class="small-button">Фільтрувати</button>
+        </form>
+        <a href="{{ url_for('admin.export_finances', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити звіт (CSV)</a>
     </div>
-{% endblock %}
+
+    {% if period %}
+    <h3>Звіт за {{ period }}</h3>
+    {% else %}
+    <h3>Звіт за весь час</h3>
+    {% endif %}
+
+    <div class="summary-card">
+        {% if period %}
+        <div class="summary-item">
+            <h4>Баланс на початок</h4>
+            <p class="balance">{{ summary.start_balance }} грн</p>
+        </div>
+        {% endif %}
+        <div class="summary-item">
+            <h4>Надходження</h4>
+            <p class="income">+ {{ summary.total_income }} грн</p>
+        </div>
+        <div class="summary-item">
+            <h4>Витрати</h4>
+            <p class="expense">- {{ summary.total_expenses }} грн</p>
+        </div>
+        <div class="summary-item">
+            <h4>Баланс на кінець</h4>
+            <p class="balance">{{ summary.end_balance }} грн</p>
+        </div>
+    </div>
+    
+    {% if transactions %}
+        <table>
+            <tbody>
+                {% for t in transactions %}
+                    <tr>
+                        <td>{{ t.date }}</td>
+                        <td>{{ t.description }}</td>
+                        <td>{{ "Надходження" if t.transaction_type == 'income' else "Витрата" }}</td>
+                        <td class="{{ t.transaction_type }}">{{ t.amount }}</td>
+                        <td>{{ t.logged_by_admin }}</td>
+                        <td>
+                            <a href="{{ url_for('admin.edit_transaction', transaction_id=t.id) }}" class="small-button">Редагувати</a>
+                            <form action="{{ url_for('admin.delete_transaction', transaction_id=t.id) }}" method="POST" style="display: inline-block;">
+                                <button type="submit" class="small-button" onclick="return confirm('Ви впевнені?');">Видалити</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>Немає транзакцій за вибраний період.</p>
+    {% endif %}
+
+    {% endblock %}

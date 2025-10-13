@@ -6,11 +6,8 @@ from datetime import datetime
 import json
 import os
 
-# Створюємо об'єкт бази даних, але ще не прив'язуємо його до додатку
 db = SQLAlchemy()
 
-# Отримуємо секретний ключ з середовища
-# Важливо, щоб він був доступний тут для моделі User
 SECRET_KEY = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this')
 s = URLSafeTimedSerializer(SECRET_KEY)
 
@@ -82,7 +79,6 @@ class GameLog(db.Model):
     event_name = db.Column(db.String(100), nullable=False)
     event_date = db.Column(db.String(30), nullable=False)
     logged_at = db.Column(db.String(30), nullable=False, default=lambda: datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
-   #logged_at = db.Column(db.DateTime, default=datetime.utcnow)
     active_participants_json = db.Column(db.Text, default='[]')
     cancelled_participants_json = db.Column(db.Text, default='[]')
     teams_json = db.Column(db.Text, default='{}')
@@ -122,7 +118,8 @@ class FinancialTransaction(db.Model):
     amount = db.Column(db.Float, nullable=False)
     transaction_type = db.Column(db.String(20), nullable=False)
     logged_by_admin = db.Column(db.String(80), nullable=False)
-    logged_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # ===== ВИПРАВЛЕНО ТИП ДАНИХ =====
+    logged_at = db.Column(db.String(30), nullable=False, default=lambda: datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
     
 class RemovedParticipantLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
