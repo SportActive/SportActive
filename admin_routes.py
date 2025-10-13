@@ -6,7 +6,6 @@ import json
 import csv
 from io import StringIO
 
-# ===== Імпортуємо з models.py =====
 from models import db, FinancialTransaction, Announcement, Poll, GameLog, User
 
 admin_bp = Blueprint('admin', __name__)
@@ -90,7 +89,6 @@ def finances():
     
     return render_template('finances.html', users=users, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month)
 
-# ===== НОВА ДОДАНА ФУНКЦІЯ =====
 @admin_bp.route('/export_finances')
 @login_required
 def export_finances():

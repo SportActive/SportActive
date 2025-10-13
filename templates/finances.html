@@ -6,11 +6,18 @@
 <style>
     .summary-card { background-color: #f8fbfd; border: 1px solid #e0e9f0; border-radius: 10px; padding: 20px; margin-bottom: 30px; display: flex; justify-content: space-around; flex-wrap: wrap; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     .summary-item { padding: 10px; flex-grow: 1; min-width: 180px;}
-    .summary-item h4 { margin: 0 0 10px 0; color: #4a698a; font-size: 1.1em; font-weight: 600; text-transform: uppercase;}
+    .summary-item h4 { margin: 0 0 10px 0; color: #4a698a; font-size: 1.1em; text-align: center; font-weight: 600; text-transform: uppercase;}
     .summary-item p { margin: 0; font-size: 1.8em; font-weight: 700; }
     .income { color: #28a745; }
     .expense { color: #dc3545; }
     .balance { color: #007bff; }
+    .transaction-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    .transaction-table th, .transaction-table td { text-align: left; padding: 12px; border-bottom: 1px solid #eee;}
+    .transaction-table th { background-color: #f0f4f7; }
+    .transaction-table tr:hover { background-color: #f6f9fc; }
+    .log-actions { display: flex; justify-content: flex-start; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+    .fee-paid-status { color: #28a745; font-weight: bold; }
+    .fee-unpaid-status { color: #dc3545; }
 </style>
 {% endblock %}
 
@@ -26,55 +33,114 @@
         <a href="{{ url_for('admin.export_finances', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити звіт (CSV)</a>
     </div>
 
-    {% if period %}
-    <h3>Звіт за {{ period }}</h3>
-    {% else %}
-    <h3>Звіт за весь час</h3>
-    {% endif %}
-
+    <h3>Звіт за {{ period_filter }}</h3>
     <div class="summary-card">
-        {% if period %}
-        <div class="summary-item">
-            <h4>Баланс на початок</h4>
-            <p class="balance">{{ summary.start_balance }} грн</p>
-        </div>
-        {% endif %}
-        <div class="summary-item">
-            <h4>Надходження</h4>
-            <p class="income">+ {{ summary.total_income }} грн</p>
-        </div>
-        <div class="summary-item">
-            <h4>Витрати</h4>
-            <p class="expense">- {{ summary.total_expenses }} грн</p>
-        </div>
-        <div class="summary-item">
-            <h4>Баланс на кінець</h4>
-            <p class="balance">{{ summary.end_balance }} грн</p>
-        </div>
+        <div class="summary-item"><h4>Баланс на початок</h4><p class="balance">{{ "%.2f"|format(summary.start_balance) }} грн</p></div>
+        <div class="summary-item"><h4>Надходження</h4><p class="income">+ {{ "%.2f"|format(summary.total_income) }} грн</p></div>
+        <div class="summary-item"><h4>Витрати</h4><p class="expense">- {{ "%.2f"|format(summary.total_expenses) }} грн</p></div>
+        <div class="summary-item"><h4>Баланс на кінець</h4><p class="balance">{{ "%.2f"|format(summary.end_balance) }} грн</p></div>
     </div>
+
+    {% if current_user.can_edit_finances() %}
+        <div class="add-transaction-section form-section">
+            <h2>Додати транзакцію</h2>
+            <form action="{{ url_for('admin.finances', period=period_filter) }}" method="POST" class="form-narrow">
+                <input type="hidden" name="form_type" value="add_transaction">
+                <input type="text" name="description" placeholder="Опис (напр. Оренда залу)" required>
+                <input type="date" name="date" required>
+                <input type="number" name="amount" step="0.01" placeholder="Сума" required>
+                <select name="transaction_type" required>
+                    <option value="income">Надходження</option>
+                    <option value="expense">Витрата</option>
+                </select>
+                <button type="submit">Додати запис</button>
+            </form>
+        </div>
+    {% endif %}
     
-    {% if transactions %}
-        <table>
+    <h2>Історія операцій за {{ period_filter }}</h2>
+    <div class="transactions-list">
+        <table class="transaction-table">
+            <thead>
+                <tr>
+                    <th>Дата</th>
+                    <th>Опис</th>
+                    <th>Тип</th>
+                    <th>Сума</th>
+                    {% if current_user.can_edit_finances() %}<th>Дії</th>{% endif %}
+                </tr>
+            </thead>
             <tbody>
                 {% for t in transactions %}
-                    <tr>
-                        <td>{{ t.date }}</td>
-                        <td>{{ t.description }}</td>
-                        <td>{{ "Надходження" if t.transaction_type == 'income' else "Витрата" }}</td>
-                        <td class="{{ t.transaction_type }}">{{ t.amount }}</td>
-                        <td>{{ t.logged_by_admin }}</td>
-                        <td>
-                            <a href="{{ url_for('admin.edit_transaction', transaction_id=t.id) }}" class="small-button">Редагувати</a>
-                            <form action="{{ url_for('admin.delete_transaction', transaction_id=t.id) }}" method="POST" style="display: inline-block;">
-                                <button type="submit" class="small-button" onclick="return confirm('Ви впевнені?');">Видалити</button>
-                            </form>
-                        </td>
-                    </tr>
+                <tr>
+                    <td>{{ t.date }}</td>
+                    <td>{{ t.description }}</td>
+                    <td>{% if t.transaction_type == 'income' %}<span class="income">Дохід</span>{% else %}<span class="expense">Витрата</span>{% endif %}</td>
+                    <td><strong class="{{ 'income' if t.transaction_type == 'income' else 'expense' }}">{{ "%.2f"|format(t.amount) }} грн</strong></td>
+                    {% if current_user.can_edit_finances() %}
+                    <td>
+                        <div class="inline-form" style="gap: 5px;">
+                            <a href="{{ url_for('admin.edit_transaction', transaction_id=t.id) }}" class="small-button" style="background-color: #ffc107; color: black;">Редагувати</a>
+                            <form action="{{ url_for('admin.delete_transaction', transaction_id=t.id) }}" method="POST" style="margin: 0;"><button type="submit" class="small-button" style="background-color: #dc3545;" onclick="return confirm('Ви впевнені?');">Видалити</button></form>
+                        </div>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{{ 5 if current_user.can_edit_finances() else 4 }}">За цей місяць немає операцій.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
-    {% else %}
-        <p>Немає транзакцій за вибраний період.</p>
-    {% endif %}
+    </div>
 
-    {% endblock %}
+    {% if current_user.is_admin() %}
+    <div class="user-fees-list">
+        <h2>Керування користувачами та внесками</h2>
+        <table class="transaction-table">
+            <thead>
+                <tr>
+                    <th>Логін</th>
+                    <th>Нікнейм</th>
+                    <th>Роль</th>
+                    <th>Внесок (за {{ period_filter }})</th>
+                    <th>Оновити внесок</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.nickname or user.username }}</td>
+                    <td>
+                        <form action="{{ url_for('admin.update_user_role', user_id=user.id) }}" method="POST" class="inline-form">
+                            <select name="role" onchange="this.form.submit()">
+                                <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
+                                <option value="superuser" {% if user.role == 'superuser' %}selected{% endif %}>Superuser</option>
+                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                            </select>
+                        </form>
+                    </td>
+                    <td>
+                        {% if user.username in paid_users_for_current_month %}
+                            <span class="fee-paid-status">Сплачено &#10003;</span>
+                        {% else %}
+                            <span class="fee-unpaid-status">Не сплачено &#10007;</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form action="{{ url_for('admin.finances', period=period_filter) }}" method="POST" class="inline-form">
+                            <input type="hidden" name="form_type" value="update_user_fee">
+                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                            <input type="date" name="fee_date" required>
+                            <input type="month" name="payment_period" value="{{ period_filter }}" required>
+                            <input type="number" name="fee_amount" step="0.01" placeholder="Сума внеску" required>
+                            <button type="submit" class="small-button">Оновити</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+{% endblock %}
