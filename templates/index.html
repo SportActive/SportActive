@@ -70,7 +70,7 @@
                                     <span class="participant-name">{{ p_entry.nickname }}</span>
                                     <span class="participation-info">(Запис: {{ format_datetime_for_display(p_entry.timestamp) }}
                                         {% if p_entry.status == 'refused' %}<span class="cancelled-badge refused-status">Відмовився</span>
-                                        {% elif p_entry.status == 'removed' %}<span class="cancelled-badge removed-status">Знятий адміном</span>{% endif %}
+                                        {% elif p_entry.status == 'removed' %}<span class="cancelled-badge removed-status">Грає в інший день</span>{% endif %}
                                     )</span>
                                 </span>
                                 

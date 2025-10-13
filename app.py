@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy import SQLAlchemy, or_
 from flask_mail import Mail, Message
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -31,6 +31,7 @@ TEAM_COLORS_PALETTE = [
     '#e0f7fa', '#dcedc8', '#fff9c4', '#ffcdd2', '#e1bee7',
     '#d1c4e9', '#c5cae9', '#bbdefb', '#b2ebf2', '#b2dfdb'
 ]
+
 
 @app.context_processor
 def utility_processor():
@@ -140,7 +141,7 @@ class EventParticipant(db.Model):
     event_id = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='CASCADE'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(20), default='active')
+    status = db.Column(db.String(20), nullable=True) # Дозволяємо NULL для старих записів
     user = db.relationship('User', backref=db.backref('participations', lazy='dynamic'))
     event = db.relationship('Event', backref=db.backref('real_participants', lazy='dynamic', cascade='all, delete-orphan'))
 
@@ -213,7 +214,7 @@ def index():
     past_events = Event.query.filter(Event.date < current_time_str).all()
     if past_events:
         for event in past_events:
-            active_participants = [p.user.username for p in event.real_participants if p.status == 'active']
+            active_participants = [p.user.username for p in event.real_participants if p.status == 'active' or p.status is None]
             cancelled_participants = [p.user.username for p in event.real_participants if p.status in ['refused', 'removed']]
             new_log_entry = GameLog(
                 event_name=event.name,
@@ -235,15 +236,16 @@ def index():
     if current_user.is_authenticated and current_user.can_manage_events():
         all_users_map = {u.username: u.id for u in User.query.all()}
         
-        # 1. Майбутні ігри (використовуємо рядкове порівняння)
+        # 1. Майбутні ігри (з урахуванням NULL статусу)
         seven_days_later_str = (current_time + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
         weekly_results = db.session.query(EventParticipant.user_id, func.count(EventParticipant.id)) \
                                    .join(Event) \
-                                   .filter(Event.date >= current_time_str, Event.date <= seven_days_later_str, EventParticipant.status == 'active') \
+                                   .filter(Event.date >= current_time_str, Event.date <= seven_days_later_str) \
+                                   .filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)) \
                                    .group_by(EventParticipant.user_id).all()
         weekly_counts = dict(weekly_results)
 
-        # 2. Минулі ігри (з архіву, використовуємо рядкове порівняння)
+        # 2. Минулі ігри (з архіву)
         thirty_days_ago_str = (current_time - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
         past_logs = GameLog.query.filter(GameLog.event_date >= thirty_days_ago_str, GameLog.event_date < current_time_str).all()
         
@@ -263,7 +265,7 @@ def index():
                 'username': p_entry.user.username,
                 'nickname': p_entry.user.nickname or p_entry.user.username,
                 'timestamp': p_entry.join_date,
-                'status': p_entry.status,
+                'status': p_entry.status or 'active',
                 'assigned_team_name': next((name for name, members in event.teams.items() if p_entry.user.username in members), None),
                 'stats': None
             }
@@ -273,6 +275,7 @@ def index():
                     'monthly_count': monthly_counts.get(p_entry.user_id, 0)
                 }
             event.processed_participants.append(p_dict)
+        
         event.active_participants_count = sum(1 for p in event.processed_participants if p['status'] == 'active')
 
     return render_template('index.html', events=events_for_display, user_nicknames=user_nicknames)
@@ -288,7 +291,7 @@ def toggle_participation(event_id):
         return redirect(url_for('index', _anchor=f'event-{event_id}'))
 
     if participant_entry:
-        if participant_entry.status == 'active':
+        if participant_entry.status == 'active' or participant_entry.status is None:
             time_since_join = datetime.utcnow() - participant_entry.join_date
             if time_since_join <= timedelta(hours=1):
                 db.session.delete(participant_entry)
@@ -326,7 +329,7 @@ def admin_toggle_participant_status(event_id, user_id):
         flash('Учасника не знайдено у цій події.', 'error')
         return redirect(url_for('index', _anchor=f'event-{event_id}'))
     try:
-        if participant.status == 'active':
+        if participant.status == 'active' or participant.status is None:
             participant.status = 'removed'
             log = RemovedParticipantLog(removed_user_id=user_id, event_id=event_id, admin_id=current_user.id)
             db.session.add(log)
@@ -527,7 +530,7 @@ def manage_teams(event_id):
         return redirect(url_for('index'))
     event = Event.query.get_or_404(event_id)
     user_nicknames = {u.username: u.nickname or u.username for u in User.query.all()}
-    active_participants = [p.user.username for p in event.real_participants if p.status == 'active']
+    active_participants = [p.user.username for p in event.real_participants if p.status == 'active' or p.status is None]
     assigned_participants = {member for members in event.teams.values() for member in members}
     unassigned_participants = [p for p in active_participants if p not in assigned_participants]
     return render_template('manage_teams.html', event=event, unassigned_participants=unassigned_participants, user_nicknames=user_nicknames)
