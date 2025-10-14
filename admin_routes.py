@@ -26,10 +26,11 @@ def finances():
             try:
                 amount = float(request.form.get('amount'))
                 trans_type = request.form.get('transaction_type')
+                # For expenses, we store a negative amount
                 new_transaction = FinancialTransaction(
                     description=request.form.get('description'),
                     date=request.form.get('date'),
-                    amount=-amount if trans_type == 'expense' else amount,
+                    amount= -amount if trans_type == 'expense' else amount,
                     transaction_type=trans_type,
                     logged_by_admin=current_user.username,
                     logged_at=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
@@ -70,6 +71,7 @@ def finances():
             start_of_month = datetime.strptime(period, '%Y-%m')
             end_of_month = (start_of_month.replace(day=28) + timedelta(days=4)).replace(day=1)
             query = query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'), FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d'))
+            # Calculate balance up to the start of the selected month
             start_balance = db.session.query(func.sum(FinancialTransaction.amount)).filter(FinancialTransaction.date < start_of_month.strftime('%Y-%m-%d')).scalar() or 0.0
         except ValueError:
             flash('Неправильний формат періоду.', 'warning')
@@ -78,7 +80,7 @@ def finances():
     transactions = query.order_by(FinancialTransaction.date.desc()).all()
     
     total_income = sum(t.amount for t in transactions if t.transaction_type == 'income')
-    total_expenses = sum(t.amount for t in transactions if t.transaction_type == 'expense')
+    total_expenses = sum(t.amount for t in transactions if t.transaction_type == 'expense') # This will be negative
     end_balance = start_balance + total_income + total_expenses
     
     summary = {'start_balance': round(start_balance, 2), 'total_income': round(total_income, 2), 'total_expenses': round(abs(total_expenses), 2), 'end_balance': round(end_balance, 2)}
@@ -124,6 +126,49 @@ def delete_transaction(transaction_id):
     flash('Транзакцію успішно видалено.', 'success')
     return redirect(url_for('admin.finances'))
 
+# ===== НОВА ФУНКЦІЯ ДЛЯ ЕКСПОРТУ =====
+@admin_bp.route('/export_finances')
+@login_required
+def export_finances():
+    if not current_user.can_view_finances():
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('index'))
+
+    period = request.args.get('period', '') 
+    query = FinancialTransaction.query
+    
+    if period: 
+        try:
+            start_of_month = datetime.strptime(period, '%Y-%m')
+            end_of_month = (start_of_month.replace(day=28) + timedelta(days=4)).replace(day=1)
+            query = query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'), FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d'))
+        except ValueError:
+            flash('Неправильний формат періоду для експорту.', 'warning')
+            return redirect(url_for('admin.finances'))
+            
+    transactions = query.order_by(FinancialTransaction.date.asc()).all()
+
+    si = StringIO()
+    cw = csv.writer(si)
+    # Заголовки CSV файлу
+    cw.writerow(["Дата", "Опис", "Тип", "Сума"])
+    
+    for t in transactions:
+        row = [
+            t.date,
+            t.description,
+            "Дохід" if t.transaction_type == 'income' else "Витрата",
+            t.amount
+        ]
+        cw.writerow(row)
+
+    output = si.getvalue()
+    response = make_response(output)
+    filename = f"finances_{period or 'all_time'}.csv"
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
+    return response
+
 @admin_bp.route('/update_user_role/<int:user_id>', methods=['POST'])
 @login_required
 def update_user_role(user_id):
@@ -133,6 +178,7 @@ def update_user_role(user_id):
     user_to_update = User.query.get_or_404(user_id)
     new_role = request.form.get('role')
     if new_role in ['user', 'superuser', 'admin']:
+        # Prevent locking out the last admin
         if user_to_update.id == current_user.id and user_to_update.is_admin() and new_role != 'admin':
             if User.query.filter_by(role='admin').count() <= 1:
                 flash('Ви не можете змінити роль єдиного адміністратора.', 'error')
@@ -163,6 +209,7 @@ def announcements():
         return redirect(url_for('admin.announcements'))
     
     all_announcements = Announcement.query.order_by(Announcement.date.desc()).all()
+    # Mark announcements as read when the user views the page
     if current_user.is_authenticated:
         seen_items = current_user.seen_items
         seen_ids = set(seen_items.get('announcements', []))
@@ -222,6 +269,7 @@ def polls():
         return redirect(url_for('admin.polls'))
     
     all_polls = Poll.query.order_by(Poll.date.desc()).all()
+    # Mark polls as read when the user views the page
     if current_user.is_authenticated:
         seen_items = current_user.seen_items
         seen_ids = set(seen_items.get('polls', []))
@@ -291,7 +339,6 @@ def game_log():
     game_logs = query.order_by(GameLog.logged_at.desc()).all()
     return render_template('game_log.html', game_logs=game_logs, period_filter=period_filter)
 
-# ===== НОВА ДОДАНА ФУНКЦІЯ =====
 @admin_bp.route('/export_game_log')
 @login_required
 def export_game_log():
