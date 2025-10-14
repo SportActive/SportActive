@@ -6,18 +6,51 @@
     <h2>Журнал завершених подій</h2>
 
     <div class="game-log-list">
-        {% if current_user.can_manage_events() %}
+        {% if current_user.is_authenticated and current_user.can_manage_events() %}
             <div class="log-actions">
                 <form action="{{ url_for('admin.game_log') }}" method="GET" class="inline-form">
                     <label for="period_filter">Фільтр за періодом (РРРР-ММ):</label>
                     <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
                     <button type="submit" class="small-button">Фільтрувати</button>
                 </form>
-                <a href="{{ url_for('admin.export_game_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал (CSV)</a>
+                {# Примітка: маршрут export_game_log потрібно буде додати в admin_routes.py, якщо його там немає #}
+                {# <a href="{{ url_for('admin.export_game_log', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити журнал (CSV)</a> #}
             </div>
             
             {% if game_logs %}
-                {% else %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Дата Події</th>
+                            <th>Назва</th>
+                            <th>Учасники (активні)</th>
+                            <th>Учасники (відмовилися)</th>
+                            <th>Команди</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in game_logs %}
+                            <tr>
+                                <td>{{ format_datetime_for_display(log.event_date) }}</td>
+                                <td>{{ log.event_name }}</td>
+                                <td>{{ log.active_participants | join(', ') if log.active_participants else 'Н/Д' }}</td>
+                                <td>{{ log.cancelled_participants | join(', ') if log.cancelled_participants else 'Н/Д' }}</td>
+                                <td>
+                                    {% if log.teams %}
+                                        <ul>
+                                        {% for team_name, members in log.teams.items() %}
+                                            <li><strong>{{ team_name }}:</strong> {{ members | join(', ') }}</li>
+                                        {% endfor %}
+                                        </ul>
+                                    {% else %}
+                                        Н/Д
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
                 <p>Журнал подій порожній або немає записів за вибраний період.</p>
             {% endif %}
         {% else %}
