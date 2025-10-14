@@ -5,7 +5,7 @@ from sqlalchemy import or_ # <--- ОСНОВНЕ ВИПРАВЛЕННЯ ТУТ
 from flask_mail import Mail, Message
 import os
 from werkzeug.security import generate_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
 from sqlalchemy import func
 import itertools
@@ -108,7 +108,6 @@ def index():
             db.session.delete(event)
         db.session.commit()
 
-    # Отримуємо користувачів, що сплатили внесок за поточний місяць
     current_month_str = datetime.now().strftime('%Y-%m')
     paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all() if ' від ' in t.description}
 
@@ -437,5 +436,57 @@ def save_teams(event_id):
     flash('Команди успішно збережено!', 'success')
     return redirect(url_for('manage_teams', event_id=event.id))
 
+@app.route('/copy_week_events', methods=['POST'])
+@login_required
+def copy_week_events():
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу на цю дію.', 'error')
+        return redirect(url_for('index'))
+
+    today = date.today()
+    start_of_week = today - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
+
+    start_of_week_dt_str = datetime.combine(start_of_week, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S')
+    end_of_week_dt_str = datetime.combine(end_of_week, datetime.max.time()).strftime('%Y-%m-%d %H:%M:%S')
+
+    events_this_week = Event.query.filter(Event.date >= start_of_week_dt_str, Event.date <= end_of_week_dt_str).all()
+
+    if not events_this_week:
+        flash('На поточному тижні немає подій для копіювання.', 'info')
+        return redirect(url_for('index'))
+
+    copied_count = 0
+    for event in events_this_week:
+        try:
+            original_date = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+            new_date = original_date + timedelta(days=7)
+            
+            existing_event = Event.query.filter_by(name=event.name, date=new_date.strftime('%Y-%m-%d %H:%M:%S')).first()
+            if existing_event:
+                continue
+
+            new_event = Event(
+                name=event.name,
+                date=new_date.strftime('%Y-%m-%d %H:%M:%S'),
+                image_url=event.image_url,
+                comment=event.comment,
+                max_participants=event.max_participants,
+                teams_json='{}'
+            )
+            db.session.add(new_event)
+            copied_count += 1
+        except ValueError:
+            continue
+            
+    if copied_count > 0:
+        db.session.commit()
+        flash(f'Успішно скопійовано {copied_count} подій на наступний тиждень!', 'success')
+    else:
+        flash('Всі події цього тижня вже існують на наступному тижні.', 'info')
+
+    return redirect(url_for('index'))
+
 if __name__ == '__main__':
     app.run(debug=True)
+
