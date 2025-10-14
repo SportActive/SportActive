@@ -450,40 +450,52 @@ def copy_week_events():
     start_of_week_dt_str = datetime.combine(start_of_week, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S')
     end_of_week_dt_str = datetime.combine(end_of_week, datetime.max.time()).strftime('%Y-%m-%d %H:%M:%S')
 
-    events_this_week = Event.query.filter(Event.date >= start_of_week_dt_str, Event.date <= end_of_week_dt_str).all()
+    # Отримуємо і майбутні, і вже зіграні події за поточний тиждень
+    upcoming_events = Event.query.filter(Event.date >= start_of_week_dt_str, Event.date <= end_of_week_dt_str).all()
+    played_events_log = GameLog.query.filter(GameLog.event_date >= start_of_week_dt_str, GameLog.event_date <= end_of_week_dt_str).all()
 
-    if not events_this_week:
+    # Створюємо унікальний список шаблонів подій для копіювання
+    event_templates = {}
+    for event in upcoming_events:
+        original_date = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+        key = (event.name, original_date.weekday())
+        if key not in event_templates:
+            event_templates[key] = {'name': event.name, 'original_date': original_date, 'comment': event.comment, 'max_participants': event.max_participants}
+
+    for log in played_events_log:
+        original_date = datetime.strptime(log.event_date, '%Y-%m-%d %H:%M:%S')
+        key = (log.event_name, original_date.weekday())
+        if key not in event_templates:
+            event_templates[key] = {'name': log.event_name, 'original_date': original_date, 'comment': log.comment, 'max_participants': None}
+
+    if not event_templates:
         flash('На поточному тижні немає подій для копіювання.', 'info')
         return redirect(url_for('index'))
 
     copied_count = 0
-    for event in events_this_week:
-        try:
-            original_date = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
-            new_date = original_date + timedelta(days=7)
-            
-            existing_event = Event.query.filter_by(name=event.name, date=new_date.strftime('%Y-%m-%d %H:%M:%S')).first()
-            if existing_event:
-                continue
+    for template in event_templates.values():
+        new_date = template['original_date'] + timedelta(days=7)
+        new_date_str = new_date.strftime('%Y-%m-%d %H:%M:%S')
 
-            new_event = Event(
-                name=event.name,
-                date=new_date.strftime('%Y-%m-%d %H:%M:%S'),
-                image_url=event.image_url,
-                comment=event.comment,
-                max_participants=event.max_participants,
-                teams_json='{}'
-            )
-            db.session.add(new_event)
-            copied_count += 1
-        except ValueError:
+        # Перевіряємо, чи подія з такою ж назвою та датою вже існує
+        if Event.query.filter_by(name=template['name'], date=new_date_str).first():
             continue
+
+        new_event = Event(
+            name=template['name'],
+            date=new_date_str,
+            comment=template.get('comment'),
+            max_participants=template.get('max_participants'),
+            teams_json='{}'
+        )
+        db.session.add(new_event)
+        copied_count += 1
             
     if copied_count > 0:
         db.session.commit()
         flash(f'Успішно скопійовано {copied_count} подій на наступний тиждень!', 'success')
     else:
-        flash('Всі події цього тижня вже існують на наступному тижні.', 'info')
+        flash('Всі події цього тижня вже існують на наступному тижні. Нічого не скопійовано.', 'info')
 
     return redirect(url_for('index'))
 
