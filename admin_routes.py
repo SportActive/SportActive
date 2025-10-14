@@ -89,41 +89,6 @@ def finances():
     
     return render_template('finances.html', users=users, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month)
 
-@admin_bp.route('/export_finances')
-@login_required
-def export_finances():
-    if not current_user.can_view_finances():
-        flash('У вас немає дозволу на експорт.', 'error')
-        return redirect(url_for('admin.finances'))
-
-    period_filter = request.args.get('period', '').strip()
-    query = FinancialTransaction.query
-
-    if period_filter:
-        query = query.filter(FinancialTransaction.date.like(f"{period_filter}%"))
-    
-    transactions = query.order_by(FinancialTransaction.date.asc()).all()
-
-    si = StringIO()
-    cw = csv.writer(si)
-    cw.writerow(["Дата", "Опис", "Тип", "Сума", "Хто додав", "Час додавання"])
-    for t in transactions:
-        row = [
-            t.date, 
-            t.description, 
-            "Надходження" if t.transaction_type == 'income' else "Витрата", 
-            t.amount, 
-            t.logged_by_admin, 
-            t.logged_at
-        ]
-        cw.writerow(row)
-
-    output = si.getvalue()
-    filename = f"finances_{period_filter or 'all'}.csv"
-    response = make_response(output)
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    response.headers["Content-type"] = "text/csv; charset=utf-8"
-    return response
 
 @admin_bp.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
 @login_required
@@ -325,6 +290,39 @@ def game_log():
         query = query.filter(GameLog.event_date.like(f"{period_filter}%"))
     game_logs = query.order_by(GameLog.logged_at.desc()).all()
     return render_template('game_log.html', game_logs=game_logs, period_filter=period_filter)
+
+# ===== НОВА ДОДАНА ФУНКЦІЯ =====
+@admin_bp.route('/export_game_log')
+@login_required
+def export_game_log():
+    if not current_user.can_manage_events():
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('index'))
+    
+    period_filter = request.args.get('period', '').strip()
+    query = GameLog.query
+    if period_filter:
+        query = query.filter(GameLog.event_date.like(f"{period_filter}%"))
+    game_logs = query.order_by(GameLog.logged_at.desc()).all()
+
+    si = StringIO()
+    cw = csv.writer(si)
+    cw.writerow(["Дата події", "Назва", "Активні учасники", "Відмовилися"])
+    
+    for log in game_logs:
+        row = [
+            log.event_date,
+            log.event_name,
+            ', '.join(log.active_participants),
+            ', '.join(log.cancelled_participants)
+        ]
+        cw.writerow(row)
+
+    output = si.getvalue()
+    response = make_response(output)
+    response.headers["Content-Disposition"] = f"attachment; filename=game_log_{period_filter or 'all'}.csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
+    return response
 
 @admin_bp.route('/fee_log')
 @login_required
