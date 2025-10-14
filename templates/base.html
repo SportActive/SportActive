@@ -6,7 +6,7 @@
     <title>{% block title %}Активно-спортивні ми{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-    {% block head_extra %}{% endblock %} {# Для додаткових стилів на окремих сторінках #}
+    {% block head_extra %}{% endblock %}
 </head>
 <body>
     <div class="container">
@@ -18,17 +18,19 @@
                     <a href="{{ url_for('index') }}">Події</a>
                     <a href="{{ url_for('admin.announcements') }}" class="nav-link {% if has_unread_announcements %}unread{% endif %}">Оголошення</a>
                     <a href="{{ url_for('admin.polls') }}" class="nav-link {% if has_unread_polls %}unread{% endif %}">Опитування</a>
-                    {% if current_user.can_manage_events() %}
+                    
+                    {% if current_user.is_authenticated and current_user.can_manage_events() %}
                         <div class="dropdown">
                             <button class="dropbtn admin-action">Адміністрування ▼</button>
                             <div class="dropdown-content">
                                 <a href="{{ url_for('add_event') }}">Додати подію</a>
                                 <a href="{{ url_for('admin.finances') }}">Керування фінансами</a>
                                 <a href="{{ url_for('admin.game_log') }}">Журнал подій</a>
-                                {# <a href="{{ url_for('admin.fee_log') }}">Журнал оплат</a> #} {# Розкоментуйте, коли ця функція буде готова #}
+                                <a href="{{ url_for('admin.fee_log') }}">Журнал оплат</a>
                             </div>
                         </div>
                     {% endif %}
+
                     <a href="{{ url_for('logout') }}" class="nav-link logout-link">Вийти</a>
                 </nav>
             {% else %}

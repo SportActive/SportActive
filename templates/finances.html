@@ -4,7 +4,6 @@
 
 {% block head_extra %}
 <style>
-    /* Стилі для карток зі зведенням */
     .summary-card { background-color: #f8fbfd; border: 1px solid #e0e9f0; border-radius: 10px; padding: 20px; margin-bottom: 30px; display: flex; justify-content: space-around; flex-wrap: wrap; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     .summary-item { padding: 10px; flex-grow: 1; min-width: 180px;}
     .summary-item h4 { margin: 0 0 10px 0; color: #4a698a; font-size: 1.1em; text-align: center; font-weight: 600; text-transform: uppercase;}
@@ -12,41 +11,19 @@
     .income { color: #28a745; }
     .expense { color: #dc3545; }
     .balance { color: #007bff; }
-
-    /* Загальні стилі для таблиць */
     .data-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     .data-table th, .data-table td { text-align: left; padding: 12px; border-bottom: 1px solid #eee;}
     .data-table th { background-color: #f0f4f7; }
     .data-table tr:hover { background-color: #f6f9fc; }
-    
     .log-actions { display: flex; justify-content: flex-start; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
     .fee-paid-status { color: #28a745; font-weight: bold; }
     .fee-unpaid-status { color: #dc3545; }
-
-    /* ===== НОВІ СТИЛІ ДЛЯ ЕРГОНОМІЧНОСТІ ===== */
-    .user-fees-list .data-table .td-username {
-        max-width: 150px; /* Обмежуємо ширину логіна */
-        word-break: break-all; /* Дозволяємо перенос довгих слів */
-    }
-    .user-fees-list .fee-update-row td {
-        background-color: #f8f9fa;
-        padding: 10px 15px;
-    }
-    .user-fees-list .inline-form {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        justify-content: flex-start;
-    }
+    .user-fees-list .data-table .td-username { max-width: 150px; word-break: break-all; }
+    .user-fees-list .fee-update-row td { background-color: #f8f9fa; padding-top: 10px; padding-bottom: 10px; }
+    .user-fees-list .inline-form { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
     .user-fees-list .inline-form input[type="date"],
-    .user-fees-list .inline-form input[type="month"] {
-        width: 140px;
-        padding: 5px;
-    }
-    .user-fees-list .inline-form input[type="number"] {
-        width: 90px;
-        padding: 5px;
-    }
+    .user-fees-list .inline-form input[type="month"] { width: 140px; padding: 5px; }
+    .user-fees-list .inline-form input[type="number"] { width: 90px; padding: 5px; }
 </style>
 {% endblock %}
 
@@ -164,7 +141,7 @@
                     </td>
                 </tr>
                 <tr class="fee-update-row">
-                    <td colspan="4">
+                    <td colspan="4" style="padding-left: 40px;">
                         <form action="{{ url_for('admin.finances', period=period_filter) }}" method="POST" class="inline-form">
                             <input type="hidden" name="form_type" value="update_user_fee">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
