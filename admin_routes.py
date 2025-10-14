@@ -6,7 +6,7 @@ import json
 import csv
 from io import StringIO
 
-from models import db, FinancialTransaction, Announcement, Poll, GameLog, User
+from models import db, FinancialTransaction, Announcement, Poll, GameLog, User, EventParticipant, Event
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -26,11 +26,10 @@ def finances():
             try:
                 amount = float(request.form.get('amount'))
                 trans_type = request.form.get('transaction_type')
-                # For expenses, we store a negative amount
                 new_transaction = FinancialTransaction(
                     description=request.form.get('description'),
                     date=request.form.get('date'),
-                    amount= -amount if trans_type == 'expense' else amount,
+                    amount=-amount if trans_type == 'expense' else amount,
                     transaction_type=trans_type,
                     logged_by_admin=current_user.username,
                     logged_at=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
@@ -71,7 +70,6 @@ def finances():
             start_of_month = datetime.strptime(period, '%Y-%m')
             end_of_month = (start_of_month.replace(day=28) + timedelta(days=4)).replace(day=1)
             query = query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'), FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d'))
-            # Calculate balance up to the start of the selected month
             start_balance = db.session.query(func.sum(FinancialTransaction.amount)).filter(FinancialTransaction.date < start_of_month.strftime('%Y-%m-%d')).scalar() or 0.0
         except ValueError:
             flash('Неправильний формат періоду.', 'warning')
@@ -80,16 +78,49 @@ def finances():
     transactions = query.order_by(FinancialTransaction.date.desc()).all()
     
     total_income = sum(t.amount for t in transactions if t.transaction_type == 'income')
-    total_expenses = sum(t.amount for t in transactions if t.transaction_type == 'expense') # This will be negative
+    total_expenses = sum(t.amount for t in transactions if t.transaction_type == 'expense')
     end_balance = start_balance + total_income + total_expenses
     
     summary = {'start_balance': round(start_balance, 2), 'total_income': round(total_income, 2), 'total_expenses': round(abs(total_expenses), 2), 'end_balance': round(end_balance, 2)}
-    users = User.query.order_by(User.username).all()
-    
+
     current_month_str = datetime.now().strftime('%Y-%m')
     paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all() if ' від ' in t.description}
     
-    return render_template('finances.html', users=users, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month)
+    # --- Логіка для відслідковування активності користувачів ---
+    users = User.query.filter(User.role != 'admin').order_by(User.username).all()
+    
+    all_logs = GameLog.query.all()
+    user_last_log_date = {}
+    for log in all_logs:
+        try:
+            log_date = datetime.strptime(log.event_date, '%Y-%m-%d %H:%M:%S')
+            for username in log.active_participants:
+                if username not in user_last_log_date or log_date > user_last_log_date[username]:
+                    user_last_log_date[username] = log_date
+        except (ValueError, TypeError):
+            continue
+
+    users_data = []
+    two_months_ago = datetime.utcnow() - timedelta(days=60)
+    
+    for user in users:
+        last_participation = db.session.query(func.max(EventParticipant.join_date)).filter(
+            EventParticipant.user_id == user.id
+        ).scalar()
+
+        last_log = user_last_log_date.get(user.username)
+
+        last_activity = max(last_participation, last_log) if last_participation and last_log else (last_participation or last_log)
+
+        is_inactive = bool(last_activity and last_activity < two_months_ago)
+
+        users_data.append({
+            'user': user,
+            'is_inactive': is_inactive,
+            'last_activity': last_activity.strftime('%d.%m.%Y') if last_activity else 'Немає даних'
+        })
+    
+    return render_template('finances.html', users_data=users_data, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month)
 
 
 @admin_bp.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
@@ -126,49 +157,6 @@ def delete_transaction(transaction_id):
     flash('Транзакцію успішно видалено.', 'success')
     return redirect(url_for('admin.finances'))
 
-# ===== НОВА ФУНКЦІЯ ДЛЯ ЕКСПОРТУ =====
-@admin_bp.route('/export_finances')
-@login_required
-def export_finances():
-    if not current_user.can_view_finances():
-        flash('Доступ заборонено.', 'error')
-        return redirect(url_for('index'))
-
-    period = request.args.get('period', '') 
-    query = FinancialTransaction.query
-    
-    if period: 
-        try:
-            start_of_month = datetime.strptime(period, '%Y-%m')
-            end_of_month = (start_of_month.replace(day=28) + timedelta(days=4)).replace(day=1)
-            query = query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'), FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d'))
-        except ValueError:
-            flash('Неправильний формат періоду для експорту.', 'warning')
-            return redirect(url_for('admin.finances'))
-            
-    transactions = query.order_by(FinancialTransaction.date.asc()).all()
-
-    si = StringIO()
-    cw = csv.writer(si)
-    # Заголовки CSV файлу
-    cw.writerow(["Дата", "Опис", "Тип", "Сума"])
-    
-    for t in transactions:
-        row = [
-            t.date,
-            t.description,
-            "Дохід" if t.transaction_type == 'income' else "Витрата",
-            t.amount
-        ]
-        cw.writerow(row)
-
-    output = si.getvalue()
-    response = make_response(output)
-    filename = f"finances_{period or 'all_time'}.csv"
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    response.headers["Content-type"] = "text/csv; charset=utf-8"
-    return response
-
 @admin_bp.route('/update_user_role/<int:user_id>', methods=['POST'])
 @login_required
 def update_user_role(user_id):
@@ -178,7 +166,6 @@ def update_user_role(user_id):
     user_to_update = User.query.get_or_404(user_id)
     new_role = request.form.get('role')
     if new_role in ['user', 'superuser', 'admin']:
-        # Prevent locking out the last admin
         if user_to_update.id == current_user.id and user_to_update.is_admin() and new_role != 'admin':
             if User.query.filter_by(role='admin').count() <= 1:
                 flash('Ви не можете змінити роль єдиного адміністратора.', 'error')
@@ -209,7 +196,6 @@ def announcements():
         return redirect(url_for('admin.announcements'))
     
     all_announcements = Announcement.query.order_by(Announcement.date.desc()).all()
-    # Mark announcements as read when the user views the page
     if current_user.is_authenticated:
         seen_items = current_user.seen_items
         seen_ids = set(seen_items.get('announcements', []))
@@ -269,7 +255,6 @@ def polls():
         return redirect(url_for('admin.polls'))
     
     all_polls = Poll.query.order_by(Poll.date.desc()).all()
-    # Mark polls as read when the user views the page
     if current_user.is_authenticated:
         seen_items = current_user.seen_items
         seen_ids = set(seen_items.get('polls', []))
@@ -447,3 +432,4 @@ def export_fee_log():
     response.headers["Content-Disposition"] = f"attachment; filename=fee_log_{period_filter or 'all'}.csv"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
+

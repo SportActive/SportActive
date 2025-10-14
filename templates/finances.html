@@ -24,6 +24,23 @@
     .user-fees-list .inline-form input[type="date"],
     .user-fees-list .inline-form input[type="month"] { width: 140px; padding: 5px; }
     .user-fees-list .inline-form input[type="number"] { width: 90px; padding: 5px; }
+    .inactive-user-row {
+        background-color: #fff0f1 !important;
+        font-style: italic;
+    }
+    .inactive-user-row td {
+        color: #721c24;
+    }
+    .delete-user-btn {
+        background-color: #dc3545;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        text-decoration: none;
+        font-size: 0.9em;
+        border: none;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -36,7 +53,7 @@
             <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
             <button type="submit" class="small-button">Фільтрувати</button>
         </form>
-        <a href="{{ url_for('admin.export_finances', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити звіт (CSV)</a>
+        {# <a href="{{ url_for('admin.export_finances', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити звіт (CSV)</a> #}
     </div>
 
     {% if period_filter %}
@@ -115,39 +132,48 @@
                     <th>Логін</th>
                     <th>Нікнейм</th>
                     <th>Роль</th>
-                    <th>Внесок (за {{ period_filter }})</th>
+                    <th>Внесок (за поточний місяць)</th>
+                    <th>Статус / Дії</th>
                 </tr>
             </thead>
             <tbody>
-                {% for user in users %}
-                <tr>
-                    <td class="td-username">{{ user.username }}</td>
-                    <td>{{ user.nickname or user.username }}</td>
+                {% for data in users_data %}
+                <tr class="{% if data.is_inactive %}inactive-user-row{% endif %}">
+                    <td class="td-username">{{ data.user.username }}</td>
+                    <td>{{ data.user.nickname or data.user.username }}</td>
                     <td>
-                        <form action="{{ url_for('admin.update_user_role', user_id=user.id) }}" method="POST" class="inline-form">
+                        <form action="{{ url_for('admin.update_user_role', user_id=data.user.id) }}" method="POST" class="inline-form">
                             <select name="role" onchange="this.form.submit()">
-                                <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
-                                <option value="superuser" {% if user.role == 'superuser' %}selected{% endif %}>Superuser</option>
-                                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                                <option value="user" {% if data.user.role == 'user' %}selected{% endif %}>User</option>
+                                <option value="superuser" {% if data.user.role == 'superuser' %}selected{% endif %}>Superuser</option>
                             </select>
                         </form>
                     </td>
                     <td>
-                        {% if user.username in paid_users_for_current_month %}
+                        {% if data.user.username in paid_users_for_current_month %}
                             <span class="fee-paid-status">Сплачено &#10003;</span>
                         {% else %}
                             <span class="fee-unpaid-status">Не сплачено &#10007;</span>
                         {% endif %}
                     </td>
+                    <td title="Остання активність: {{ data.last_activity }}">
+                         {% if data.is_inactive %}
+                            <form action="{{ url_for('delete_user', user_id=data.user.id) }}" method="POST" onsubmit="return confirm('Ви впевнені, що хочете видалити цього неактивного користувача? Йому буде надіслано сповіщення.');">
+                                <button type="submit" class="delete-user-btn">Видалити</button>
+                            </form>
+                        {% else %}
+                            Активний
+                        {% endif %}
+                    </td>
                 </tr>
-                <tr class="fee-update-row">
-                    <td colspan="4" style="padding-left: 40px;">
+                <tr class="fee-update-row {% if data.is_inactive %}inactive-user-row{% endif %}">
+                    <td colspan="5" style="padding-left: 40px;">
                         <form action="{{ url_for('admin.finances', period=period_filter) }}" method="POST" class="inline-form">
                             <input type="hidden" name="form_type" value="update_user_fee">
-                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                            <input type="hidden" name="user_id" value="{{ data.user.id }}">
                             <label><strong>Оновити внесок:</strong></label>
                             <input type="date" name="fee_date" required>
-                            <input type="month" name="payment_period" value="{{ period_filter }}" required>
+                            <input type="month" name="payment_period" value="{{ period_filter if period_filter else '' }}" required>
                             <input type="number" name="fee_amount" step="0.01" placeholder="Сума" required>
                             <button type="submit" class="small-button">Оновити</button>
                         </form>

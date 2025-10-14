@@ -499,6 +499,43 @@ def copy_week_events():
 
     return redirect(url_for('index'))
 
+@app.route('/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    if not current_user.is_admin():
+        flash('Тільки адміністратор може видаляти користувачів.', 'error')
+        return redirect(url_for('admin.finances'))
+
+    user_to_delete = User.query.get_or_404(user_id)
+
+    if user_to_delete.id == current_user.id:
+        flash('Ви не можете видалити самі себе.', 'error')
+        return redirect(url_for('admin.finances'))
+        
+    if user_to_delete.is_admin():
+        flash('Ви не можете видалити іншого адміністратора.', 'error')
+        return redirect(url_for('admin.finances'))
+
+    try:
+        msg = Message('Ваш акаунт було видалено', recipients=[user_to_delete.email])
+        msg.body = f"""Привіт, {user_to_delete.nickname or user_to_delete.username}!
+
+Ваш акаунт у системі "Активно-спортивні ми" було видалено адміністратором через тривалу неактивність (більше 2 місяців).
+
+Якщо ви бажаєте знову приєднатися до наших подій, ви можете зареєструватися знову в будь-який час.
+
+Дякуємо за розуміння!"""
+        mail.send(msg)
+    except Exception as e:
+        app.logger.error(f"Could not send deletion email to {user_to_delete.username}: {e}")
+        flash(f'Не вдалося надіслати лист-сповіщення користувачу {user_to_delete.username}, але його все одно буде видалено.', 'warning')
+
+    db.session.delete(user_to_delete)
+    db.session.commit()
+    flash(f'Користувача "{user_to_delete.nickname or user_to_delete.username}" було успішно видалено.', 'success')
+    
+    return redirect(url_for('admin.finances'))
+
 if __name__ == '__main__':
     app.run(debug=True)
 
