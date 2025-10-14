@@ -53,7 +53,7 @@
             <input type="month" id="period_filter" name="period" value="{{ period_filter if period_filter else '' }}">
             <button type="submit" class="small-button">Фільтрувати</button>
         </form>
-        {# <a href="{{ url_for('admin.export_finances', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити звіт (CSV)</a> #}
+        <a href="{{ url_for('admin.export_finances', period=period_filter if period_filter else '') }}" class="small-button download-button">Завантажити звіт (CSV)</a>
     </div>
 
     {% if period_filter %}
@@ -126,6 +126,12 @@
     {% if current_user.is_admin() %}
     <div class="user-fees-list">
         <h2>Керування користувачами та внесками</h2>
+        
+        <div class="summary-card" style="margin-bottom: 20px; justify-content: center; gap: 40px;">
+            <div class="summary-item"><h4>Активних членів</h4><p class="income">{{ user_stats.active }}</p></div>
+            <div class="summary-item"><h4>Неактивних членів</h4><p class="expense">{{ user_stats.inactive }}</p></div>
+        </div>
+        
         <table class="data-table">
             <thead>
                 <tr>
@@ -185,3 +191,4 @@
     </div>
     {% endif %}
 {% endblock %}
+

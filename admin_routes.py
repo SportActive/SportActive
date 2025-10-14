@@ -112,7 +112,8 @@ def finances():
 
         last_activity = max(last_participation, last_log) if last_participation and last_log else (last_participation or last_log)
 
-        is_inactive = bool(last_activity and last_activity < two_months_ago)
+        # ВИПРАВЛЕННЯ: Користувач неактивний, якщо активності не було ВЗАГАЛІ, або вона була давно
+        is_inactive = not last_activity or last_activity < two_months_ago
 
         users_data.append({
             'user': user,
@@ -120,7 +121,12 @@ def finances():
             'last_activity': last_activity.strftime('%d.%m.%Y') if last_activity else 'Немає даних'
         })
     
-    return render_template('finances.html', users_data=users_data, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month)
+    # --- ДОДАНО: Підрахунок статистики ---
+    active_count = sum(1 for data in users_data if not data['is_inactive'])
+    inactive_count = len(users_data) - active_count
+    user_stats = {'active': active_count, 'inactive': inactive_count}
+    
+    return render_template('finances.html', users_data=users_data, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month, user_stats=user_stats)
 
 
 @admin_bp.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
@@ -430,6 +436,48 @@ def export_fee_log():
     output = si.getvalue()
     response = make_response(output)
     response.headers["Content-Disposition"] = f"attachment; filename=fee_log_{period_filter or 'all'}.csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
+    return response
+
+@admin_bp.route('/export_finances')
+@login_required
+def export_finances():
+    if not current_user.can_view_finances():
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('index'))
+
+    period = request.args.get('period', '')
+    query = FinancialTransaction.query
+    if period:
+        try:
+            start_of_month = datetime.strptime(period, '%Y-%m')
+            end_of_month = (start_of_month.replace(day=28) + timedelta(days=4)).replace(day=1)
+            query = query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'),
+                                 FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d'))
+        except ValueError:
+            pass  # Ignore invalid period format
+
+    transactions = query.order_by(FinancialTransaction.date.asc()).all()
+
+    si = StringIO()
+    # Ensure UTF-8 encoding with BOM for Excel compatibility
+    si.write('\ufeff')
+    cw = csv.writer(si)
+    cw.writerow(['Дата', 'Опис', 'Тип', 'Сума', 'Занотував', 'Час запису'])
+
+    for t in transactions:
+        cw.writerow([
+            t.date,
+            t.description,
+            'Дохід' if t.transaction_type == 'income' else 'Витрата',
+            f'{t.amount:.2f}',
+            t.logged_by_admin,
+            t.logged_at
+        ])
+
+    output = si.getvalue()
+    response = make_response(output)
+    response.headers["Content-Disposition"] = f"attachment; filename=finances_{period or 'all_time'}.csv"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
