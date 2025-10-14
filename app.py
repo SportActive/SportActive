@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from flask_sqlalchemy import SQLAlchemy, or_
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import or_ # <--- ОСНОВНЕ ВИПРАВЛЕННЯ ТУТ
 from flask_mail import Mail, Message
 import os
 from werkzeug.security import generate_password_hash
@@ -9,7 +10,7 @@ import json
 from sqlalchemy import func
 import itertools
 
-# ===== Імпортуємо db та всі моделі з models.py =====
+# ===== ЗМІНА 1: Імпортуємо db та всі моделі з models.py =====
 from models import db, User, Event, EventParticipant, GameLog, Announcement, Poll, RemovedParticipantLog, FinancialTransaction
 
 app = Flask(__name__)
@@ -31,13 +32,13 @@ app.config.update(
     MAIL_DEFAULT_SENDER=os.environ.get('MAIL_DEFAULT_SENDER')
 )
 
-# ===== Ініціалізуємо розширення =====
+# ===== ЗМІНА 2: Ініціалізуємо розширення =====
 db.init_app(app)
 mail = Mail(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# ===== Реєструємо Blueprint =====
+# ===== ЗМІНА 3: Реєструємо Blueprint =====
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
 
@@ -110,9 +111,6 @@ def index():
     user_nicknames = {u.username: u.nickname or u.username for u in User.query.all()}
     events_for_display = Event.query.filter(Event.date >= current_time_str).order_by(Event.date).all()
     
-    current_month_str = datetime.now().strftime('%Y-%m')
-    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all() if ' від ' in t.description}
-    
     weekly_counts = {}
     monthly_counts = {}
     if current_user.is_authenticated and current_user.can_manage_events():
@@ -158,10 +156,8 @@ def index():
         
         event.active_participants_count = sum(1 for p in event.processed_participants if p['status'] == 'active')
 
-    # ===== КЛЮЧОВЕ ВИПРАВЛЕННЯ ТУТ =====
-    return render_template('index.html', events=events_for_display, user_nicknames=user_nicknames, paid_users_for_current_month=paid_users_for_current_month)
+    return render_template('index.html', events=events_for_display, user_nicknames=user_nicknames)
 
-# ... (решта файлу app.py, починаючи з @app.route('/toggle_participation...'), залишається без змін) ...
 @app.route('/toggle_participation/<int:event_id>', methods=['POST'])
 @login_required
 def toggle_participation(event_id):
