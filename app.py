@@ -108,6 +108,10 @@ def index():
             db.session.delete(event)
         db.session.commit()
 
+    # Отримуємо користувачів, що сплатили внесок за поточний місяць
+    current_month_str = datetime.now().strftime('%Y-%m')
+    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all() if ' від ' in t.description}
+
     user_nicknames = {u.username: u.nickname or u.username for u in User.query.all()}
     events_for_display = Event.query.filter(Event.date >= current_time_str).order_by(Event.date).all()
     
@@ -156,7 +160,7 @@ def index():
         
         event.active_participants_count = sum(1 for p in event.processed_participants if p['status'] == 'active')
 
-    return render_template('index.html', events=events_for_display, user_nicknames=user_nicknames)
+    return render_template('index.html', events=events_for_display, user_nicknames=user_nicknames, paid_users_for_current_month=paid_users_for_current_month)
 
 @app.route('/toggle_participation/<int:event_id>', methods=['POST'])
 @login_required
