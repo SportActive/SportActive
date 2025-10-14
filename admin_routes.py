@@ -112,7 +112,6 @@ def finances():
 
         last_activity = max(last_participation, last_log) if last_participation and last_log else (last_participation or last_log)
 
-        # ВИПРАВЛЕННЯ: Користувач неактивний, якщо активності не було ВЗАГАЛІ, або вона була давно
         is_inactive = not last_activity or last_activity < two_months_ago
 
         users_data.append({
@@ -121,10 +120,12 @@ def finances():
             'last_activity': last_activity.strftime('%d.%m.%Y') if last_activity else 'Немає даних'
         })
     
-    # --- ДОДАНО: Підрахунок статистики ---
     active_count = sum(1 for data in users_data if not data['is_inactive'])
     inactive_count = len(users_data) - active_count
     user_stats = {'active': active_count, 'inactive': inactive_count}
+    
+    # --- ДОДАНО: Сортування списку користувачів ---
+    users_data.sort(key=lambda item: (item['is_inactive'], (item['user'].nickname or item['user'].username).lower()))
     
     return render_template('finances.html', users_data=users_data, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month, user_stats=user_stats)
 
