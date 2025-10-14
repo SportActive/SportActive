@@ -1,5 +1,32 @@
 {% extends "base.html" %}
 
+{% block title %}Активно-спортивні ми{% endblock %}
+
+{% block head_extra %}
+<style>
+    .event-comment { background-color: #fffbe6; border-left: 4px solid #ffc107; padding: 10px 15px; margin-top: 15px; border-radius: 4px; font-style: italic; color: #5d4c15; }
+    .participant-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 5px 0; border-bottom: 1px dashed #eee; flex-wrap: wrap; }
+    .participant-name { font-weight: 600; color: #34495e; }
+    .cancelled-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8em; margin-left: 5px; white-space: nowrap; }
+    .refused-status { background-color: #f8d7da; color: #721c24; }
+    .removed-status { background-color: #ffc107; color: #343a40; }
+    .admin-stats { font-size: 0.8em; color: #6c757d; border: 1px solid #ced4da; padding: 2px 6px; border-radius: 3px; margin-right: 10px; white-space: nowrap; }
+    .participant-info-group { display: flex; align-items: center; flex-shrink: 0; margin-right: 10px; }
+    .participant-actions-group { display: flex; align-items: center; margin-left: auto; }
+    .remove-participant-btn { background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; margin-left: 10px; transition: background-color 0.2s; }
+    
+    /* ===== НОВИЙ СТИЛЬ ДЛЯ ПРАПОРЦЯ ===== */
+    .fee-paid-badge {
+        color: #28a745; /* Зелений колір */
+        font-weight: 700;
+        margin-left: 5px;
+        font-size: 1.1em;
+        line-height: 1;
+    }
+</style>
+{% endblock %}
+
+
 {% block content %}
 <div class="events-list">
     <h3>Заплановані події</h3>
@@ -14,7 +41,13 @@
                 {% for p_entry in event.processed_participants %}
                     <li class="participant-row">
                         <span class="participant-info-group">
-                            <span class="participant-name">{{ p_entry.nickname }}</span>
+                            <span class="participant-name">
+                                {{ p_entry.nickname }}
+                                
+                                {% if p_entry.username in paid_users_for_current_month %}
+                                    <span class="fee-paid-badge" title="Внесок за поточний місяць сплачено">&#10003;</span>
+                                {% endif %}
+                                </span>
                             <span class="participation-info">(Запис: {{ format_datetime_for_display(p_entry.timestamp) }}
                                 {% if p_entry.status == 'refused' %}<span class="cancelled-badge refused-status">Відмовився</span>
                                 {% elif p_entry.status == 'removed' %}<span class="cancelled-badge removed-status">Грає в інший день</span>
