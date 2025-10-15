@@ -1,16 +1,15 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_ # <--- ОСНОВНЕ ВИПРАВЛЕННЯ ТУТ
+from sqlalchemy import or_ 
 from flask_mail import Mail, Message
 import os
 from werkzeug.security import generate_password_hash
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 import json
 from sqlalchemy import func
 import itertools
 
-# ===== ЗМІНА 1: Імпортуємо db та всі моделі з models.py =====
 from models import db, User, Event, EventParticipant, GameLog, Announcement, Poll, RemovedParticipantLog, FinancialTransaction
 
 app = Flask(__name__)
@@ -32,13 +31,11 @@ app.config.update(
     MAIL_DEFAULT_SENDER=os.environ.get('MAIL_DEFAULT_SENDER')
 )
 
-# ===== ЗМІНА 2: Ініціалізуємо розширення =====
 db.init_app(app)
 mail = Mail(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# ===== ЗМІНА 3: Реєструємо Blueprint =====
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
 
@@ -108,9 +105,6 @@ def index():
             db.session.delete(event)
         db.session.commit()
 
-    current_month_str = datetime.now().strftime('%Y-%m')
-    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all() if ' від ' in t.description}
-
     user_nicknames = {u.username: u.nickname or u.username for u in User.query.all()}
     events_for_display = Event.query.filter(Event.date >= current_time_str).order_by(Event.date).all()
     
@@ -119,13 +113,31 @@ def index():
     if current_user.is_authenticated and current_user.can_manage_events():
         all_users_map = {u.username: u.id for u in User.query.all()}
         
-        seven_days_later_str = (current_time + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-        weekly_results = db.session.query(EventParticipant.user_id, func.count(EventParticipant.id)) \
+        # --- ОНОВЛЕНА ЛОГІКА: Розрахунок статистики за поточний тиждень (Пн-Нд) ---
+        today = current_time.date()
+        start_of_week = today - timedelta(days=today.weekday())
+        end_of_week = start_of_week + timedelta(days=6)
+        
+        start_of_week_str = start_of_week.strftime('%Y-%m-%d 00:00:00')
+        end_of_week_str = end_of_week.strftime('%Y-%m-%d 23:59:59')
+
+        # 1. Підрахунок майбутніх ігор на цьому тижні
+        weekly_future_results = db.session.query(EventParticipant.user_id, func.count(EventParticipant.id)) \
                                    .join(Event) \
-                                   .filter(Event.date >= current_time_str, Event.date <= seven_days_later_str) \
+                                   .filter(Event.date >= current_time_str, Event.date <= end_of_week_str) \
                                    .filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)) \
                                    .group_by(EventParticipant.user_id).all()
-        weekly_counts = dict(weekly_results)
+        weekly_counts = dict(weekly_future_results)
+
+        # 2. Підрахунок вже зіграних ігор на цьому тижні з журналу
+        past_logs_this_week = GameLog.query.filter(GameLog.event_date >= start_of_week_str, GameLog.event_date < current_time_str).all()
+        for log in past_logs_this_week:
+            for username in log.active_participants:
+                user_id = all_users_map.get(username)
+                if user_id:
+                    weekly_counts[user_id] = weekly_counts.get(user_id, 0) + 1
+
+        # --- Кінець оновленої логіки ---
 
         thirty_days_ago_str = (current_time - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
         past_logs = GameLog.query.filter(GameLog.event_date >= thirty_days_ago_str, GameLog.event_date < current_time_str).all()
@@ -159,7 +171,69 @@ def index():
         
         event.active_participants_count = sum(1 for p in event.processed_participants if p['status'] == 'active')
 
+    current_month_str = datetime.now().strftime('%Y-%m')
+    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all() if ' від ' in t.description}
+
     return render_template('index.html', events=events_for_display, user_nicknames=user_nicknames, paid_users_for_current_month=paid_users_for_current_month)
+
+
+@app.route('/copy_week_events', methods=['POST'])
+@login_required
+def copy_week_events():
+    if not current_user.is_admin():
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('index'))
+
+    today = datetime.utcnow().date()
+    start_of_week = today - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
+    
+    start_of_week_str = start_of_week.strftime('%Y-%m-%d 00:00:00')
+    end_of_week_str = end_of_week.strftime('%Y-%m-%d 23:59:59')
+
+    # ОНОВЛЕНО: Шукаємо події і в активних, і в журналі
+    events_to_copy = []
+    
+    # 1. Активні події на цьому тижні
+    active_events = Event.query.filter(Event.date >= start_of_week_str, Event.date <= end_of_week_str).all()
+    events_to_copy.extend(active_events)
+    
+    # 2. Зіграні події на цьому тижні з журналу
+    logged_events = GameLog.query.filter(GameLog.event_date >= start_of_week_str, GameLog.event_date <= end_of_week_str).all()
+    
+    # Створюємо словник для уникнення дублікатів (за назвою та датою)
+    copied_event_identifiers = {(e.name, e.date.split(' ')[0]) for e in active_events}
+
+    for log in logged_events:
+        log_date_str = log.event_date.split(' ')[0]
+        if (log.event_name, log_date_str) not in copied_event_identifiers:
+            # Створюємо тимчасовий об'єкт, схожий на Event
+            mock_event = Event(
+                name=log.event_name,
+                date=log.event_date,
+                comment=log.comment
+            )
+            events_to_copy.append(mock_event)
+            copied_event_identifiers.add((log.event_name, log_date_str))
+
+    if not events_to_copy:
+        flash('На поточному тижні немає подій для копіювання.', 'info')
+        return redirect(url_for('index'))
+
+    for event in events_to_copy:
+        original_date = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
+        new_date = original_date + timedelta(days=7)
+        new_event = Event(
+            name=event.name,
+            date=new_date.strftime('%Y-%m-%d %H:%M:%S'),
+            comment=event.comment,
+            max_participants=getattr(event, 'max_participants', None)
+        )
+        db.session.add(new_event)
+    
+    db.session.commit()
+    flash('Події поточного тижня успішно скопійовано на наступний!', 'success')
+    return redirect(url_for('index'))
 
 @app.route('/toggle_participation/<int:event_id>', methods=['POST'])
 @login_required
@@ -221,9 +295,36 @@ def admin_toggle_participant_status(event_id, user_id):
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Помилка при зміні статусу учасника: {e}")
-        flash('Помилка сервера при зміні статусу учасника.', 'error')
+        flash(f'Помилка сервера при зміні статусу учасника. {e}', 'error')
     return redirect(url_for('index', _anchor=f'event-{event_id}'))
+    
+@app.route('/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    if not current_user.is_admin():
+        flash('У вас немає дозволу на цю дію.', 'error')
+        return redirect(url_for('admin.finances'))
+    user_to_delete = User.query.get_or_404(user_id)
+    if user_to_delete.is_admin():
+        flash('Ви не можете видалити адміністратора.', 'error')
+        return redirect(url_for('admin.finances'))
+
+    try:
+        msg = Message('Ваш акаунт було видалено', recipients=[user_to_delete.email])
+        msg.body = f"""Привіт, {user_to_delete.nickname or user_to_delete.username}!
+Ваш акаунт у системі "Активно-спортивні ми" було видалено через тривалу неактивність.
+Ви завжди можете зареєструватися знову.
+Дякуємо за участь!"""
+        mail.send(msg)
+        flash(f'Користувачу {user_to_delete.username} надіслано сповіщення.', 'info')
+    except Exception as e:
+        flash(f'Не вдалося надіслати лист користувачу. Помилка: {e}', 'warning')
+
+    db.session.delete(user_to_delete)
+    db.session.commit()
+    flash(f'Користувача "{user_to_delete.username}" було успішно видалено.', 'success')
+    return redirect(url_for('admin.finances'))
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -435,106 +536,6 @@ def save_teams(event_id):
     db.session.commit()
     flash('Команди успішно збережено!', 'success')
     return redirect(url_for('manage_teams', event_id=event.id))
-
-@app.route('/copy_week_events', methods=['POST'])
-@login_required
-def copy_week_events():
-    if not current_user.can_manage_events():
-        flash('У вас немає дозволу на цю дію.', 'error')
-        return redirect(url_for('index'))
-
-    today = date.today()
-    start_of_week = today - timedelta(days=today.weekday())
-    end_of_week = start_of_week + timedelta(days=6)
-
-    start_of_week_dt_str = datetime.combine(start_of_week, datetime.min.time()).strftime('%Y-%m-%d %H:%M:%S')
-    end_of_week_dt_str = datetime.combine(end_of_week, datetime.max.time()).strftime('%Y-%m-%d %H:%M:%S')
-
-    # Отримуємо і майбутні, і вже зіграні події за поточний тиждень
-    upcoming_events = Event.query.filter(Event.date >= start_of_week_dt_str, Event.date <= end_of_week_dt_str).all()
-    played_events_log = GameLog.query.filter(GameLog.event_date >= start_of_week_dt_str, GameLog.event_date <= end_of_week_dt_str).all()
-
-    # Створюємо унікальний список шаблонів подій для копіювання
-    event_templates = {}
-    for event in upcoming_events:
-        original_date = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S')
-        key = (event.name, original_date.weekday())
-        if key not in event_templates:
-            event_templates[key] = {'name': event.name, 'original_date': original_date, 'comment': event.comment, 'max_participants': event.max_participants}
-
-    for log in played_events_log:
-        original_date = datetime.strptime(log.event_date, '%Y-%m-%d %H:%M:%S')
-        key = (log.event_name, original_date.weekday())
-        if key not in event_templates:
-            event_templates[key] = {'name': log.event_name, 'original_date': original_date, 'comment': log.comment, 'max_participants': None}
-
-    if not event_templates:
-        flash('На поточному тижні немає подій для копіювання.', 'info')
-        return redirect(url_for('index'))
-
-    copied_count = 0
-    for template in event_templates.values():
-        new_date = template['original_date'] + timedelta(days=7)
-        new_date_str = new_date.strftime('%Y-%m-%d %H:%M:%S')
-
-        # Перевіряємо, чи подія з такою ж назвою та датою вже існує
-        if Event.query.filter_by(name=template['name'], date=new_date_str).first():
-            continue
-
-        new_event = Event(
-            name=template['name'],
-            date=new_date_str,
-            comment=template.get('comment'),
-            max_participants=template.get('max_participants'),
-            teams_json='{}'
-        )
-        db.session.add(new_event)
-        copied_count += 1
-            
-    if copied_count > 0:
-        db.session.commit()
-        flash(f'Успішно скопійовано {copied_count} подій на наступний тиждень!', 'success')
-    else:
-        flash('Всі події цього тижня вже існують на наступному тижні. Нічого не скопійовано.', 'info')
-
-    return redirect(url_for('index'))
-
-@app.route('/delete_user/<int:user_id>', methods=['POST'])
-@login_required
-def delete_user(user_id):
-    if not current_user.is_admin():
-        flash('Тільки адміністратор може видаляти користувачів.', 'error')
-        return redirect(url_for('admin.finances'))
-
-    user_to_delete = User.query.get_or_404(user_id)
-
-    if user_to_delete.id == current_user.id:
-        flash('Ви не можете видалити самі себе.', 'error')
-        return redirect(url_for('admin.finances'))
-        
-    if user_to_delete.is_admin():
-        flash('Ви не можете видалити іншого адміністратора.', 'error')
-        return redirect(url_for('admin.finances'))
-
-    try:
-        msg = Message('Ваш акаунт було видалено', recipients=[user_to_delete.email])
-        msg.body = f"""Привіт, {user_to_delete.nickname or user_to_delete.username}!
-
-Ваш акаунт у системі "Активно-спортивні ми" було видалено адміністратором через тривалу неактивність (більше 2 місяців).
-
-Якщо ви бажаєте знову приєднатися до наших подій, ви можете зареєструватися знову в будь-який час.
-
-Дякуємо за розуміння!"""
-        mail.send(msg)
-    except Exception as e:
-        app.logger.error(f"Could not send deletion email to {user_to_delete.username}: {e}")
-        flash(f'Не вдалося надіслати лист-сповіщення користувачу {user_to_delete.username}, але його все одно буде видалено.', 'warning')
-
-    db.session.delete(user_to_delete)
-    db.session.commit()
-    flash(f'Користувача "{user_to_delete.nickname or user_to_delete.username}" було успішно видалено.', 'success')
-    
-    return redirect(url_for('admin.finances'))
 
 if __name__ == '__main__':
     app.run(debug=True)
