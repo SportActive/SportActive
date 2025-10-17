@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_ 
+from sqlalchemy import or_
 from flask_mail import Mail, Message
 import os
 from werkzeug.security import generate_password_hash
@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 import json
 from sqlalchemy import func
 import itertools
+import logging
+
+# --- Базове налаштування лоґування ---
+logging.basicConfig(level=logging.INFO)
 
 from models import db, User, Event, EventParticipant, GameLog, Announcement, Poll, RemovedParticipantLog, FinancialTransaction
 
@@ -191,23 +195,18 @@ def copy_week_events():
     start_of_week_str = start_of_week.strftime('%Y-%m-%d 00:00:00')
     end_of_week_str = end_of_week.strftime('%Y-%m-%d 23:59:59')
 
-    # ОНОВЛЕНО: Шукаємо події і в активних, і в журналі
     events_to_copy = []
     
-    # 1. Активні події на цьому тижні
     active_events = Event.query.filter(Event.date >= start_of_week_str, Event.date <= end_of_week_str).all()
     events_to_copy.extend(active_events)
     
-    # 2. Зіграні події на цьому тижні з журналу
     logged_events = GameLog.query.filter(GameLog.event_date >= start_of_week_str, GameLog.event_date <= end_of_week_str).all()
     
-    # Створюємо словник для уникнення дублікатів (за назвою та датою)
     copied_event_identifiers = {(e.name, e.date.split(' ')[0]) for e in active_events}
 
     for log in logged_events:
         log_date_str = log.event_date.split(' ')[0]
         if (log.event_name, log_date_str) not in copied_event_identifiers:
-            # Створюємо тимчасовий об'єкт, схожий на Event
             mock_event = Event(
                 name=log.event_name,
                 date=log.event_date,
@@ -318,6 +317,7 @@ def delete_user(user_id):
         mail.send(msg)
         flash(f'Користувачу {user_to_delete.username} надіслано сповіщення.', 'info')
     except Exception as e:
+        logging.error(f"Failed to send deletion email to {user_to_delete.email}: {e}")
         flash(f'Не вдалося надіслати лист користувачу. Помилка: {e}', 'warning')
 
     db.session.delete(user_to_delete)
@@ -352,7 +352,8 @@ def register():
             mail.send(msg)
             flash('Реєстрація успішна! На вашу пошту надіслано лист для підтвердження.', 'success')
         except Exception as e:
-            flash(f'Реєстрація успішна, але не вдалося надіслати лист. {e}', 'warning')
+            logging.error(f"Failed to send confirmation email to {email}: {e}")
+            flash(f'Реєстрація успішна, але не вдалося надіслати лист. Зверніться до адміністратора.', 'warning')
         return redirect(url_for('login'))
     return render_template('register.html')
 
@@ -412,6 +413,7 @@ def reset_password_request():
             try:
                 mail.send(msg)
             except Exception as e:
+                logging.error(f"Failed to send password reset email to {user.email}: {e}")
                 flash(f'Не вдалося надіслати лист. Помилка: {e}', 'error')
         flash('Якщо такий email зареєстровано, на нього було надіслано інструкції з відновлення пароля.', 'info')
         return redirect(url_for('login'))

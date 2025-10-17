@@ -22,15 +22,15 @@
         </div>
         <nav class="main-nav">
             <a href="{{ url_for('index') }}">Події</a>
-            <a href="{{ url_for('announcements') }}">Оголошення {% if has_unread_announcements %}<span class="new-indicator"></span>{% endif %}</a>
-            <a href="{{ url_for('polls') }}">Опитування {% if has_unread_polls %}<span class="new-indicator"></span>{% endif %}</a>
+            <a href="{{ url_for('admin.announcements') }}">Оголошення {% if has_unread_announcements %}<span class="new-indicator"></span>{% endif %}</a>
+            <a href="{{ url_for('admin.polls') }}">Опитування {% if has_unread_polls %}<span class="new-indicator"></span>{% endif %}</a>
             {% if current_user.is_authenticated and current_user.can_manage_events() %}
             <div class="dropdown">
                 <button class="dropbtn admin-action">Адміністрування ▼</button>
                 <div class="dropdown-content">
                     {% if current_user.can_manage_events() %}<a href="{{ url_for('add_event') }}">Додати подію</a>{% endif %}
-                    {% if current_user.can_view_finances() %}<a href="{{ url_for('finances') }}">Керування фінансами</a>{% endif %}
-                    {% if current_user.is_admin() %}<a href="{{ url_for('game_log') }}">Журнал подій</a>{% endif %}
+                    {% if current_user.can_view_finances() %}<a href="{{ url_for('admin.finances') }}">Керування фінансами</a>{% endif %}
+                    {% if current_user.is_admin() %}<a href="{{ url_for('admin.game_log') }}">Журнал подій</a>{% endif %}
                 </div>
             </div>
             {% endif %}
@@ -42,7 +42,7 @@
         {% if current_user.is_authenticated and current_user.is_admin() %}
             <div class="create-poll-section form-section">
                 <h2>Створити нове опитування</h2>
-                <form action="{{ url_for('polls') }}" method="POST" class="form-narrow">
+                <form action="{{ url_for('admin.polls') }}" method="POST" class="form-narrow">
                     <input type="text" name="question" placeholder="Питання для опитування" required>
                     <input type="text" name="option1" placeholder="Варіант відповіді 1" required>
                     <input type="text" name="option2" placeholder="Варіант відповіді 2" required>
@@ -63,7 +63,7 @@
                         <p class="poll-meta">Створено: {{ format_datetime_for_display(poll.date) }} від {{ poll.author }}</p>
                         
                         {% if current_user.is_authenticated and current_user.username not in poll.voted_users %}
-                            <form action="{{ url_for('vote_poll', poll_id=poll.id) }}" method="POST">
+                            <form action="{{ url_for('admin.vote_poll', poll_id=poll.id) }}" method="POST">
                                 {% for option_index, option in enumerate(poll.options) %}
                                     <label class="poll-option-label">
                                         <input type="checkbox" name="option_indices" value="{{ option_index }}">
