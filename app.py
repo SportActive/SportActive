@@ -26,15 +26,16 @@ if database_url and database_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Оновлено для роботи з SendGrid або Gmail
 app.config.update(
-    MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.gmail.com'),
-    MAIL_PORT=int(os.environ.get('MAIL_PORT', 465)),
-    MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'False').lower() in ['true', 'on', '1'],
-    MAIL_USE_SSL=os.environ.get('MAIL_USE_SSL', 'True').lower() in ['true', 'on', '1'],
+    MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.sendgrid.net'),
+    MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
+    MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1'],
+    MAIL_USE_SSL=os.environ.get('MAIL_USE_SSL', 'false').lower() in ['true', 'on', '1'],
     MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
     MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
     MAIL_DEFAULT_SENDER=os.environ.get('MAIL_DEFAULT_SENDER'),
-    MAIL_TIMEOUT=int(os.environ.get('MAIL_TIMEOUT', 30))
+    MAIL_TIMEOUT=int(os.environ.get('MAIL_TIMEOUT', 20))
 )
 
 db.init_app(app)
@@ -119,7 +120,6 @@ def index():
     if current_user.is_authenticated and current_user.can_manage_events():
         all_users_map = {u.username: u.id for u in User.query.all()}
         
-        # --- ОНОВЛЕНА ЛОГІКА: Розрахунок статистики за поточний тиждень (Пн-Нд) ---
         today = current_time.date()
         start_of_week = today - timedelta(days=today.weekday())
         end_of_week = start_of_week + timedelta(days=6)
@@ -127,7 +127,6 @@ def index():
         start_of_week_str = start_of_week.strftime('%Y-%m-%d 00:00:00')
         end_of_week_str = end_of_week.strftime('%Y-%m-%d 23:59:59')
 
-        # 1. Підрахунок майбутніх ігор на цьому тижні
         weekly_future_results = db.session.query(EventParticipant.user_id, func.count(EventParticipant.id)) \
                                    .join(Event) \
                                    .filter(Event.date >= current_time_str, Event.date <= end_of_week_str) \
@@ -135,15 +134,12 @@ def index():
                                    .group_by(EventParticipant.user_id).all()
         weekly_counts = dict(weekly_future_results)
 
-        # 2. Підрахунок вже зіграних ігор на цьому тижні з журналу
         past_logs_this_week = GameLog.query.filter(GameLog.event_date >= start_of_week_str, GameLog.event_date < current_time_str).all()
         for log in past_logs_this_week:
             for username in log.active_participants:
                 user_id = all_users_map.get(username)
                 if user_id:
                     weekly_counts[user_id] = weekly_counts.get(user_id, 0) + 1
-
-        # --- Кінець оновленої логіки ---
 
         thirty_days_ago_str = (current_time - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
         past_logs = GameLog.query.filter(GameLog.event_date >= thirty_days_ago_str, GameLog.event_date < current_time_str).all()
@@ -254,7 +250,7 @@ def toggle_participation(event_id):
                 flash(f'Вашу участь у події "{event.name}" скасовано (повністю видалено).', 'info')
             else:
                 participant_entry.status = 'refused'
-                flash(f'Ви відмовились від участі у події "{event.name}". Вас позначено як "Відмовився".', 'warning')
+                flash(f'Ви відмовилися від участі у події "{event.name}". Вас позначено як "Відмовився".', 'warning')
             
             teams = event.teams
             for team_name, members in list(teams.items()):
@@ -268,7 +264,7 @@ def toggle_participation(event_id):
     else:
         new_participant = EventParticipant(event_id=event_id, user_id=current_user.id, status='active')
         db.session.add(new_participant)
-        flash('Ви успішно зареєструвались на подію!', 'success')
+        flash('Ви успішно зареєструвалися на подію!', 'success')
 
     db.session.commit()
     return redirect(url_for('index', _anchor=f'event-{event_id}'))
@@ -342,21 +338,34 @@ def register():
         if User.query.filter_by(email=email).first():
             flash('Ця електронна пошта вже зареєстрована.', 'error')
             return render_template('register.html')
+        
         hashed_password = generate_password_hash(password)
         new_user_role = 'admin' if User.query.count() == 0 else 'user'
-        confirmation_token = os.urandom(24).hex()
-        new_user = User(username=username, nickname=nickname, password_hash=hashed_password, role=new_user_role, email=email, email_confirmation_token=confirmation_token)
+        
+        # --- ЗМІНЕНО: Користувач одразу активний, підтвердження пошти не потрібне ---
+        new_user = User(
+            username=username, 
+            nickname=nickname, 
+            password_hash=hashed_password, 
+            role=new_user_role, 
+            email=email, 
+            email_confirmed=True # <-- Встановлюємо True одразу
+        )
         db.session.add(new_user)
         db.session.commit()
+
+        # --- ЗМІНЕНО: Спроба надіслати вітальний лист (не блокує реєстрацію) ---
         try:
-            confirm_url = url_for('confirm_email', token=confirmation_token, _external=True)
-            msg = Message('Підтвердження пошти', recipients=[email], body=f"Привіт, {nickname}!\n\nДля підтвердження пошти перейдіть за посиланням:\n{confirm_url}")
+            msg = Message('Ласкаво просимо до клубу!', recipients=[email])
+            msg.body = f"Привіт, {nickname}!\n\nВітаємо у спільноті 'Активно-спортивні ми'.\nВаш акаунт успішно створено, ви можете увійти в систему."
             mail.send(msg)
-            flash('Реєстрація успішна! На вашу пошту надіслано лист для підтвердження.', 'success')
         except Exception as e:
-            logging.error(f"Failed to send confirmation email to {email}: {e}")
-            flash(f'Реєстрація успішна, але не вдалося надіслати лист. Зверніться до адміністратора.', 'warning')
+            # Просто логуємо помилку, не турбуємо користувача
+            logging.error(f"Failed to send welcome email to {email}: {e}")
+            
+        flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
         return redirect(url_for('login'))
+        
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -367,9 +376,7 @@ def login():
         password = request.form['password']
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
-            if not user.email_confirmed:
-                flash('Будь ласка, підтвердьте свою електронну пошту, щоб увійти.', 'warning')
-                return redirect(url_for('login'))
+            # --- ВИДАЛЕНО: Перевірка підтвердження пошти ---
             login_user(user)
             flash(f'Вхід успішний! Привіт, {user.nickname or user.username}!', 'success')
             return redirect(request.args.get('next') or url_for('index'))
@@ -384,18 +391,8 @@ def logout():
     flash('Ви вийшли з системи.', 'info')
     return redirect(url_for('index'))
 
-@app.route('/confirm/<token>')
-def confirm_email(token):
-    user = User.query.filter_by(email_confirmation_token=token).first()
-    if user:
-        user.email_confirmed = True
-        user.email_confirmation_token = None
-        db.session.commit()
-        flash('Ваша пошта успішно підтверджена! Тепер ви можете увійти.', 'success')
-    else:
-        flash('Недійсний токен підтвердження.', 'error')
-    return redirect(url_for('login'))
-    
+# --- ВИДАЛЕНО: Маршрут /confirm/<token> більше не потрібен ---
+
 @app.route('/reset_password_request', methods=['GET', 'POST'])
 def reset_password_request():
     if current_user.is_authenticated:
@@ -417,16 +414,11 @@ def reset_password_request():
 
 Якщо ви не робили цей запит, просто проігноруйте цей лист."""
                 
-                # Відправка з обробкою помилок та timeout
-                with app.app_context():
-                    mail.send(msg)
+                mail.send(msg)
                 logging.info(f"Password reset email sent successfully to {user.email}")
             except Exception as e:
-                # Логуємо помилку, але не показуємо користувачу деталі
                 logging.error(f"Failed to send password reset email to {user.email}: {e}")
-                # НЕ показуємо flash з помилкою тут, щоб не розкривати існування email
         
-        # ЗАВЖДИ показуємо це повідомлення (навіть якщо email не знайдено або помилка відправки)
         flash('Якщо такий email зареєстровано, на нього було надіслано інструкції з відновлення пароля.', 'info')
         return redirect(url_for('login'))
     return render_template('reset_request.html')
@@ -553,3 +545,4 @@ def save_teams(event_id):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
