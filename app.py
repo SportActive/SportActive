@@ -11,7 +11,7 @@ from sqlalchemy import func
 import itertools
 import logging
 
-# --- Базове налаштування лоґування ---
+# --- Базове налаштування логування ---
 logging.basicConfig(level=logging.INFO)
 
 from models import db, User, Event, EventParticipant, GameLog, Announcement, Poll, RemovedParticipantLog, FinancialTransaction
@@ -30,9 +30,11 @@ app.config.update(
     MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.gmail.com'),
     MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
     MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1'],
+    MAIL_USE_SSL=os.environ.get('MAIL_USE_SSL', 'false').lower() in ['true', 'on', '1'],
     MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
     MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
-    MAIL_DEFAULT_SENDER=os.environ.get('MAIL_DEFAULT_SENDER')
+    MAIL_DEFAULT_SENDER=os.environ.get('MAIL_DEFAULT_SENDER'),
+    MAIL_TIMEOUT=int(os.environ.get('MAIL_TIMEOUT', 30))
 )
 
 db.init_app(app)
@@ -252,7 +254,7 @@ def toggle_participation(event_id):
                 flash(f'Вашу участь у події "{event.name}" скасовано (повністю видалено).', 'info')
             else:
                 participant_entry.status = 'refused'
-                flash(f'Ви відмовилися від участі у події "{event.name}". Вас позначено як "Відмовився".', 'warning')
+                flash(f'Ви відмовились від участі у події "{event.name}". Вас позначено як "Відмовився".', 'warning')
             
             teams = event.teams
             for team_name, members in list(teams.items()):
@@ -266,7 +268,7 @@ def toggle_participation(event_id):
     else:
         new_participant = EventParticipant(event_id=event_id, user_id=current_user.id, status='active')
         db.session.add(new_participant)
-        flash('Ви успішно зареєструвалися на подію!', 'success')
+        flash('Ви успішно зареєструвались на подію!', 'success')
 
     db.session.commit()
     return redirect(url_for('index', _anchor=f'event-{event_id}'))
@@ -402,19 +404,29 @@ def reset_password_request():
         email = request.form.get('email')
         user = User.query.filter_by(email=email).first()
         if user:
-            token = user.get_reset_token()
-            reset_url = url_for('reset_password', token=token, _external=True)
-            msg = Message('Запит на відновлення пароля', recipients=[user.email])
-            msg.body = f"""Привіт, {user.nickname or user.username}!
+            try:
+                token = user.get_reset_token()
+                reset_url = url_for('reset_password', token=token, _external=True)
+                msg = Message('Запит на відновлення пароля', recipients=[user.email])
+                msg.body = f"""Привіт, {user.nickname or user.username}!
+
 Щоб відновити ваш пароль, будь ласка, перейдіть за посиланням нижче.
 Посилання буде активним протягом 30 хвилин.
+
 {reset_url}
+
 Якщо ви не робили цей запит, просто проігноруйте цей лист."""
-            try:
-                mail.send(msg)
+                
+                # Відправка з обробкою помилок та timeout
+                with app.app_context():
+                    mail.send(msg)
+                logging.info(f"Password reset email sent successfully to {user.email}")
             except Exception as e:
+                # Логуємо помилку, але не показуємо користувачу деталі
                 logging.error(f"Failed to send password reset email to {user.email}: {e}")
-                flash(f'Не вдалося надіслати лист. Помилка: {e}', 'error')
+                # НЕ показуємо flash з помилкою тут, щоб не розкривати існування email
+        
+        # ЗАВЖДИ показуємо це повідомлення (навіть якщо email не знайдено або помилка відправки)
         flash('Якщо такий email зареєстровано, на нього було надіслано інструкції з відновлення пароля.', 'info')
         return redirect(url_for('login'))
     return render_template('reset_request.html')
@@ -541,4 +553,3 @@ def save_teams(event_id):
 
 if __name__ == '__main__':
     app.run(debug=True)
-
