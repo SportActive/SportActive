@@ -115,43 +115,83 @@ def index():
     user_nicknames = {u.username: u.nickname or u.username for u in User.query.all()}
     events_for_display = Event.query.filter(Event.date >= current_time_str).order_by(Event.date).all()
     
-    weekly_counts = {}
-    monthly_counts = {}
+    all_users_map = {}
+    all_user_ids = set()
     if current_user.is_authenticated and current_user.can_manage_events():
-        all_users_map = {u.username: u.id for u in User.query.all()}
-        
-        today = current_time.date()
-        start_of_week = today - timedelta(days=today.weekday())
-        end_of_week = start_of_week + timedelta(days=6)
-        
-        start_of_week_str = start_of_week.strftime('%Y-%m-%d 00:00:00')
-        end_of_week_str = end_of_week.strftime('%Y-%m-%d 23:59:59')
+        all_users = User.query.all()
+        all_users_map = {u.username: u.id for u in all_users}
+        all_user_ids = {u.id for u in all_users}
 
-        weekly_future_results = db.session.query(EventParticipant.user_id, func.count(EventParticipant.id)) \
-                                   .join(Event) \
-                                   .filter(Event.date >= current_time_str, Event.date <= end_of_week_str) \
-                                   .filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)) \
-                                   .group_by(EventParticipant.user_id).all()
-        weekly_counts = dict(weekly_future_results)
-
-        past_logs_this_week = GameLog.query.filter(GameLog.event_date >= start_of_week_str, GameLog.event_date < current_time_str).all()
-        for log in past_logs_this_week:
-            for username in log.active_participants:
-                user_id = all_users_map.get(username)
-                if user_id:
-                    weekly_counts[user_id] = weekly_counts.get(user_id, 0) + 1
-
-        thirty_days_ago_str = (current_time - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
-        past_logs = GameLog.query.filter(GameLog.event_date >= thirty_days_ago_str, GameLog.event_date < current_time_str).all()
-        
-        monthly_counts = {}
-        for log in past_logs:
-            for username in log.active_participants:
-                user_id = all_users_map.get(username)
-                if user_id:
-                    monthly_counts[user_id] = monthly_counts.get(user_id, 0) + 1
-
+    # --- ОНОВЛЕНО: Статистика рахується для КОЖНОЇ події ---
     for event in events_for_display:
+        
+        # --- НОВА ЛОГІКА: Визначаємо тиждень ПОДІЇ ---
+        try:
+            event_date = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S').date()
+        except ValueError:
+            event_date = current_time.date() # Fallback
+
+        start_of_event_week = event_date - timedelta(days=event_date.weekday())
+        end_of_event_week = start_of_event_week + timedelta(days=6)
+        
+        start_of_week_str = start_of_event_week.strftime('%Y-%m-%d 00:00:00')
+        end_of_week_str = end_of_event_week.strftime('%Y-%m-%d 23:59:59')
+
+        weekly_counts = {}
+        monthly_counts = {}
+        
+        if current_user.is_authenticated and current_user.can_manage_events():
+            weekly_counts = {user_id: 0 for user_id in all_user_ids}
+            
+            # 1. Рахуємо майбутні ігри (EventParticipant) на тижні події
+            future_games_query = db.session.query(EventParticipant.user_id, func.count(EventParticipant.id)) \
+                                       .join(Event) \
+                                       .filter(Event.date >= start_of_week_str, Event.date <= end_of_week_str) \
+                                       .filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)) \
+                                       .group_by(EventParticipant.user_id).all()
+            
+            for user_id, count in future_games_query:
+                if user_id in weekly_counts:
+                    weekly_counts[user_id] += count
+
+            # 2. Рахуємо минулі ігри (GameLog) на тижні події
+            past_logs_query = GameLog.query.filter(GameLog.event_date >= start_of_week_str, GameLog.event_date <= end_of_week_str).all()
+            
+            for log in past_logs_query:
+                for username in log.active_participants:
+                    user_id = all_users_map.get(username)
+                    if user_id and user_id in weekly_counts:
+                        weekly_counts[user_id] += 1
+                        
+            # 3. Рахуємо статистику за 30 днів (відносно дати ПОДІЇ)
+            thirty_days_ago = event_date - timedelta(days=30)
+            thirty_days_ago_str = thirty_days_ago.strftime('%Y-%m-%d 00:00:00')
+            event_date_str = event_date.strftime('%Y-%m-%d 23:59:59')
+            
+            monthly_counts = {user_id: 0 for user_id in all_user_ids}
+            
+            # 3a. Майбутні за 30 днів
+            future_monthly_query = db.session.query(EventParticipant.user_id, func.count(EventParticipant.id)) \
+                                       .join(Event) \
+                                       .filter(Event.date >= thirty_days_ago_str, Event.date <= event_date_str) \
+                                       .filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)) \
+                                       .group_by(EventParticipant.user_id).all()
+
+            for user_id, count in future_monthly_query:
+                if user_id in monthly_counts:
+                    monthly_counts[user_id] += count
+            
+            # 3b. Минулі за 30 днів
+            past_monthly_query = GameLog.query.filter(GameLog.event_date >= thirty_days_ago_str, GameLog.event_date <= event_date_str).all()
+            
+            for log in past_monthly_query:
+                for username in log.active_participants:
+                    user_id = all_users_map.get(username)
+                    if user_id and user_id in monthly_counts:
+                        monthly_counts[user_id] += 1
+
+        # --- Кінець нової логіки ---
+
         event.team_colors = {team_name: color for team_name, color in zip(sorted(event.teams.keys()), itertools.cycle(TEAM_COLORS_PALETTE))}
         event.processed_participants = []
         for p_entry in event.real_participants.order_by(EventParticipant.join_date.asc()).all():
@@ -391,8 +431,20 @@ def logout():
     flash('Ви вийшли з системи.', 'info')
     return redirect(url_for('index'))
 
-# --- ВИДАЛЕНО: Маршрут /confirm/<token> більше не потрібен ---
-
+@app.route('/confirm/<token>')
+def confirm_email(token):
+    # Цей маршрут тепер фактично не використовується для входу, 
+    # але може бути корисним, якщо ви захочете відновити підтвердження.
+    user = User.query.filter_by(email_confirmation_token=token).first()
+    if user:
+        user.email_confirmed = True
+        user.email_confirmation_token = None
+        db.session.commit()
+        flash('Ваша пошта успішно підтверджена!', 'success')
+    else:
+        flash('Недійсний токен підтвердження.', 'error')
+    return redirect(url_for('login'))
+    
 @app.route('/reset_password_request', methods=['GET', 'POST'])
 def reset_password_request():
     if current_user.is_authenticated:
@@ -545,4 +597,3 @@ def save_teams(event_id):
 
 if __name__ == '__main__':
     app.run(debug=True)
-
