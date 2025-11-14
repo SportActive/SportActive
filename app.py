@@ -46,6 +46,41 @@ login_manager.login_view = 'login'
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
 
+# --- НОВИЙ МАРШРУТ ДЛЯ ТЕСТУВАННЯ ПОШТИ ---
+@app.route('/admin-test-email')
+@login_required
+def admin_test_email():
+    if not current_user.is_admin():
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('index'))
+    
+    test_email = current_user.email
+    logging.info(f"Attempting to send test email to {test_email} via {app.config.get('MAIL_SERVER')}")
+    try:
+        msg = Message('Тестовий лист | UASportActiveKent', recipients=[test_email])
+        msg.body = f"""Привіт, {current_user.nickname}!
+        
+Це тестовий лист, відправлений "вручну" з додатку.
+Якщо ти отримав цей лист, це означає, що твої налаштування SMTP на Railway (MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD) налаштовані ПРАВИЛЬНО.
+
+Поточні налаштування:
+MAIL_SERVER: {app.config.get('MAIL_SERVER')}
+MAIL_PORT: {app.config.get('MAIL_PORT')}
+MAIL_USERNAME: {app.config.get('MAIL_USERNAME')}
+MAIL_USE_TLS: {app.config.get('MAIL_USE_TLS')}
+MAIL_USE_SSL: {app.config.get('MAIL_USE_SSL')}
+"""
+        mail.send(msg)
+        logging.info("Test email sent successfully.")
+        flash('Тестовий лист успішно надіслано! Перевір свою пошту.', 'success')
+    except Exception as e:
+        logging.error(f"FAILED to send test email: {e}")
+        flash(f'ПОМИЛКА при відправці листа: {e}', 'error')
+        
+    return redirect(url_for('index'))
+# --- КІНЕЦЬ НОВОГО МАРШРУТУ ---
+
+
 # --- Палітра кольорів для команд ---
 TEAM_COLORS_PALETTE = [
     '#e0f7fa', '#dcedc8', '#fff9c4', '#ffcdd2', '#e1bee7',
