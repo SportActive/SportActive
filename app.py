@@ -381,29 +381,31 @@ def register():
         
         hashed_password = generate_password_hash(password)
         new_user_role = 'admin' if User.query.count() == 0 else 'user'
-        
-        # --- ЗМІНЕНО: Користувач одразу активний, підтвердження пошти не потрібне ---
+        confirmation_token = os.urandom(24).hex()
+
+        # --- ВІДНОВЛЕНО: Користувач неактивний до підтвердження ---
         new_user = User(
             username=username, 
             nickname=nickname, 
             password_hash=hashed_password, 
             role=new_user_role, 
             email=email, 
-            email_confirmed=True # <-- Встановлюємо True одразу
+            email_confirmed=False, # <-- Встановлюємо False
+            email_confirmation_token=confirmation_token # <-- Зберігаємо токен
         )
         db.session.add(new_user)
         db.session.commit()
 
-        # --- ЗМІНЕНО: Спроба надіслати вітальний лист (не блокує реєстрацію) ---
+        # --- ВІДНОВЛЕНО: Спроба надіслати лист для підтвердження ---
         try:
-            msg = Message('Ласкаво просимо до клубу!', recipients=[email])
-            msg.body = f"Привіт, {nickname}!\n\nВітаємо у спільноті 'Активно-спортивні ми'.\nВаш акаунт успішно створено, ви можете увійти в систему."
+            confirm_url = url_for('confirm_email', token=confirmation_token, _external=True)
+            msg = Message('Підтвердження пошти', recipients=[email], body=f"Привіт, {nickname}!\n\nДля підтвердження пошти перейдіть за посиланням:\n{confirm_url}")
             mail.send(msg)
+            flash('Реєстрація успішна! На вашу пошту надіслано лист для підтвердження.', 'success')
         except Exception as e:
-            # Просто логуємо помилку, не турбуємо користувача
-            logging.error(f"Failed to send welcome email to {email}: {e}")
+            logging.error(f"Failed to send confirmation email to {email}: {e}")
+            flash(f'Реєстрація успішна, але не вдалося надіслати лист. Зверніться до адміністратора.', 'warning')
             
-        flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
         return redirect(url_for('login'))
         
     return render_template('register.html')
@@ -416,7 +418,10 @@ def login():
         password = request.form['password']
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
-            # --- ВИДАЛЕНО: Перевірка підтвердження пошти ---
+            # --- ВІДНОВЛЕНО: Перевірка підтвердження пошти ---
+            if not user.email_confirmed:
+                flash('Будь ласка, підтвердьте свою електронну пошту, щоб увійти.', 'warning')
+                return redirect(url_for('login'))
             login_user(user)
             flash(f'Вхід успішний! Привіт, {user.nickname or user.username}!', 'success')
             return redirect(request.args.get('next') or url_for('index'))
@@ -433,14 +438,13 @@ def logout():
 
 @app.route('/confirm/<token>')
 def confirm_email(token):
-    # Цей маршрут тепер фактично не використовується для входу, 
-    # але може бути корисним, якщо ви захочете відновити підтвердження.
+    # --- ВІДНОВЛЕНО: Логіка підтвердження ---
     user = User.query.filter_by(email_confirmation_token=token).first()
     if user:
         user.email_confirmed = True
         user.email_confirmation_token = None
         db.session.commit()
-        flash('Ваша пошта успішно підтверджена!', 'success')
+        flash('Ваша пошта успішно підтверджена! Тепер ви можете увійти.', 'success')
     else:
         flash('Недійсний токен підтвердження.', 'error')
     return redirect(url_for('login'))
