@@ -41,6 +41,49 @@
         border: none;
         cursor: pointer;
     }
+    
+    /* --- 5. НОВІ СТИЛІ ДЛЯ КОДІВ --- */
+    .invite-codes-section {
+        background-color: #fdf8e6;
+        border: 1px solid #fceec4;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 30px;
+    }
+    .invite-codes-section h2 {
+        margin-top: 0;
+    }
+    .invite-code-list {
+        list-style-type: none;
+        padding-left: 0;
+    }
+    .invite-code-list li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #fff;
+        padding: 10px 15px;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 1.1em;
+        font-weight: bold;
+    }
+    .invite-code-list .code-meta {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-size: 0.9em;
+        font-weight: normal;
+        color: #666;
+    }
+    .copy-btn {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9em;
+    }
 </style>
 {% endblock %}
 
@@ -189,6 +232,45 @@
             </tbody>
         </table>
     </div>
+    
+    <div class="invite-codes-section">
+        <h2>Керування кодами запрошень</h2>
+        <form action="{{ url_for('admin.generate_invite_code') }}" method="POST">
+            <button type="submit" class="button">Згенерувати новий код</button>
+        </form>
+        
+        <h3 style="margin-top: 20px;">Активні невикористані коди:</h3>
+        {% if unused_codes %}
+            <ul class="invite-code-list">
+                {% for code in unused_codes %}
+                    <li>
+                        <span>
+                            {{ code.code }}
+                            <span class="code-meta">(Згенеровано: {{ code.generated_by }}, {{ code.created_at.strftime('%d.%m.%Y') }})</span>
+                        </span>
+                        <button class="copy-btn" onclick="copyToClipboard('{{ code.code }}')">Копіювати</button>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Немає активних кодів. Згенеруйте новий.</p>
+        {% endif %}
+    </div>
+    
+    <script>
+    function copyToClipboard(text) {
+        const el = document.createElement('textarea');
+        el.value = text;
+        document.body.appendChild(el);
+        el.select();
+        try {
+            document.execCommand('copy');
+             alert('Код ' + text + ' скопійовано в буфер обміну!');
+        } catch (err) {
+             alert('Не вдалося скопіювати код. Будь ласка, зробіть це вручну.');
+        }
+        document.body.removeChild(el);
+    }
+    </script>
     {% endif %}
 {% endblock %}
-

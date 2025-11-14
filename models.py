@@ -5,6 +5,7 @@ from itsdangerous import URLSafeTimedSerializer
 from datetime import datetime
 import json
 import os
+import secrets # <-- 1. ДОДАЄМО ІМПОРТ
 
 db = SQLAlchemy()
 
@@ -118,7 +119,6 @@ class FinancialTransaction(db.Model):
     amount = db.Column(db.Float, nullable=False)
     transaction_type = db.Column(db.String(20), nullable=False)
     logged_by_admin = db.Column(db.String(80), nullable=False)
-    # ===== ВИПРАВЛЕНО ТИП ДАНИХ =====
     logged_at = db.Column(db.String(30), nullable=False, default=lambda: datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
     
 class RemovedParticipantLog(db.Model):
@@ -131,3 +131,12 @@ class RemovedParticipantLog(db.Model):
     removed_user = db.relationship('User', foreign_keys=[removed_user_id])
     event = db.relationship('Event', foreign_keys=[event_id])
     admin = db.relationship('User', foreign_keys=[admin_id])
+
+# --- 4. НОВА ТАБЛИЦЯ ДЛЯ КОДІВ ЗАПРОШЕНЬ ---
+class InviteCode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(16), unique=True, nullable=False)
+    is_used = db.Column(db.Boolean, default=False, nullable=False)
+    generated_by = db.Column(db.String(80), nullable=False) # Ім'я адміна
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    used_by_username = db.Column(db.String(80), nullable=True) # Хто використав

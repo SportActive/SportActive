@@ -1,6 +1,5 @@
 import os
 import sys
-from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -11,29 +10,26 @@ from alembic import context
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # --- Імпортуємо об'єкти Flask-додатка та SQLAlchemy ---
-from flask import Flask # Імпортуємо Flask тут (для app.app_context)
 from app import app, db 
 
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# ВИДАЛЕНО fileConfig - більше не потрібен
 
 # --- target_metadata тепер визначається в контексті додатка ---
 with app.app_context():
     target_metadata = db.metadata
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-    """
+    """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        render_as_batch=True, # Важливо для PostgreSQL
-        compare_type=True, # Для кращого autogenerate
+        render_as_batch=True,
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -41,16 +37,14 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-    """
-    connectable = None 
-
-    # Беремо URL бази даних зі змінної оточення Render (DATABASE_URL)
-    # Якщо її немає (локально), використовуємо URL з alembic.ini
-    # alembic.ini тепер має містити ваш Railway URL для локальних міграцій
+    """Run migrations in 'online' mode."""
+    # Беремо URL бази даних зі змінної оточення
     db_url = os.environ.get("DATABASE_URL") 
     if db_url is None:
-        db_url = config.get_main_option("sqlalchemy.url") # Це буде Railway URL з alembic.ini
+        # Для локальної розробки
+        db_url = config.get_main_option("sqlalchemy.url")
+        if db_url is None:
+            db_url = "sqlite:///local.db"
 
     connectable = engine_from_config(
         {"sqlalchemy.url": db_url}, 
@@ -62,8 +56,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            render_as_batch=True, # Важливо для PostgreSQL
-            compare_type=True, # Для кращого autogenerate
+            render_as_batch=True,
+            compare_type=True,
             dialect_opts={"paramstyle": "named"},
         )
 

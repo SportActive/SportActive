@@ -5,8 +5,11 @@ from sqlalchemy import func
 import json
 import csv
 from io import StringIO
+import secrets # <-- 1. ДОДАЄМО ІМПОРТ
 
 from models import db, FinancialTransaction, Announcement, Poll, GameLog, User, EventParticipant, Event
+# --- 2. ІМПОРТУЄМО НОВУ МОДЕЛЬ ---
+from models import InviteCode 
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -124,11 +127,45 @@ def finances():
     inactive_count = len(users_data) - active_count
     user_stats = {'active': active_count, 'inactive': inactive_count}
     
-    # --- ДОДАНО: Сортування списку користувачів ---
     users_data.sort(key=lambda item: (item['is_inactive'], (item['user'].nickname or item['user'].username).lower()))
-    
-    return render_template('finances.html', users_data=users_data, transactions=transactions, summary=summary, period_filter=period, paid_users_for_current_month=paid_users_for_current_month, user_stats=user_stats)
 
+    # --- 3. ОТРИМУЄМО КОДИ ЗАПРОШЕНЬ ---
+    unused_codes = InviteCode.query.filter_by(is_used=False).order_by(InviteCode.created_at.desc()).all()
+    
+    return render_template('finances.html', 
+                           users_data=users_data, 
+                           transactions=transactions, 
+                           summary=summary, 
+                           period_filter=period, 
+                           paid_users_for_current_month=paid_users_for_current_month, 
+                           user_stats=user_stats,
+                           unused_codes=unused_codes) # <-- 4. Передаємо коди у шаблон
+
+# --- 5. НОВИЙ МАРШРУТ ДЛЯ ГЕНЕРАЦІЇ КОДУ ---
+@admin_bp.route('/generate_invite', methods=['POST'])
+@login_required
+def generate_invite_code():
+    if not current_user.is_admin():
+        flash('Доступ заборонено.', 'error')
+        return redirect(url_for('admin.finances'))
+
+    # Створюємо унікальний код
+    while True:
+        new_code_str = f"SPORT-{secrets.token_hex(4).upper()}"
+        existing_code = InviteCode.query.filter_by(code=new_code_str).first()
+        if not existing_code:
+            break
+            
+    new_code = InviteCode(
+        code=new_code_str,
+        generated_by=current_user.nickname or current_user.username
+    )
+    db.session.add(new_code)
+    db.session.commit()
+    
+    flash(f'Новий код запрошення {new_code_str} успішно згенеровано!', 'success')
+    return redirect(url_for('admin.finances'))
+# --- КІНЕЦЬ НОВОГО МАРШРУТУ ---
 
 @admin_bp.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
 @login_required
@@ -481,4 +518,3 @@ def export_finances():
     response.headers["Content-Disposition"] = f"attachment; filename=finances_{period or 'all_time'}.csv"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
-

@@ -10,11 +10,14 @@ import json
 from sqlalchemy import func
 import itertools
 import logging
+from flask_migrate import Migrate # <-- 1. ДОДАЄМО ІМПОРТ
 
 # --- Базове налаштування логування ---
 logging.basicConfig(level=logging.INFO)
 
 from models import db, User, Event, EventParticipant, GameLog, Announcement, Poll, RemovedParticipantLog, FinancialTransaction
+# --- 2. ІМПОРТУЄМО НОВУ МОДЕЛЬ ---
+from models import InviteCode
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your_super_secret_key_here_please_change_this')
@@ -26,7 +29,7 @@ if database_url and database_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Оновлено для роботи з SendGrid або Gmail
+# Налаштування пошти (все ще потрібні для відновлення пароля)
 app.config.update(
     MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.sendgrid.net'),
     MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
@@ -39,47 +42,13 @@ app.config.update(
 )
 
 db.init_app(app)
+migrate = Migrate(app, db) # <-- 3. ІНІЦІАЛІЗУЄМО MIGRATE
 mail = Mail(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
-
-# --- НОВИЙ МАРШРУТ ДЛЯ ТЕСТУВАННЯ ПОШТИ ---
-@app.route('/admin-test-email')
-@login_required
-def admin_test_email():
-    if not current_user.is_admin():
-        flash('Доступ заборонено.', 'error')
-        return redirect(url_for('index'))
-    
-    test_email = current_user.email
-    logging.info(f"Attempting to send test email to {test_email} via {app.config.get('MAIL_SERVER')}")
-    try:
-        msg = Message('Тестовий лист | UASportActiveKent', recipients=[test_email])
-        msg.body = f"""Привіт, {current_user.nickname}!
-        
-Це тестовий лист, відправлений "вручну" з додатку.
-Якщо ти отримав цей лист, це означає, що твої налаштування SMTP на Railway (MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD) налаштовані ПРАВИЛЬНО.
-
-Поточні налаштування:
-MAIL_SERVER: {app.config.get('MAIL_SERVER')}
-MAIL_PORT: {app.config.get('MAIL_PORT')}
-MAIL_USERNAME: {app.config.get('MAIL_USERNAME')}
-MAIL_USE_TLS: {app.config.get('MAIL_USE_TLS')}
-MAIL_USE_SSL: {app.config.get('MAIL_USE_SSL')}
-"""
-        mail.send(msg)
-        logging.info("Test email sent successfully.")
-        flash('Тестовий лист успішно надіслано! Перевір свою пошту.', 'success')
-    except Exception as e:
-        logging.error(f"FAILED to send test email: {e}")
-        flash(f'ПОМИЛКА при відправці листа: {e}', 'error')
-        
-    return redirect(url_for('index'))
-# --- КІНЕЦЬ НОВОГО МАРШРУТУ ---
-
 
 # --- Палітра кольорів для команд ---
 TEAM_COLORS_PALETTE = [
@@ -157,10 +126,9 @@ def index():
         all_users_map = {u.username: u.id for u in all_users}
         all_user_ids = {u.id for u in all_users}
 
-    # --- ОНОВЛЕНО: Статистика рахується для КОЖНОЇ події ---
+    # --- Статистика рахується для КОЖНОЇ події ---
     for event in events_for_display:
         
-        # --- НОВА ЛОГІКА: Визначаємо тиждень ПОДІЇ ---
         try:
             event_date = datetime.strptime(event.date, '%Y-%m-%d %H:%M:%S').date()
         except ValueError:
@@ -224,8 +192,6 @@ def index():
                     user_id = all_users_map.get(username)
                     if user_id and user_id in monthly_counts:
                         monthly_counts[user_id] += 1
-
-        # --- Кінець нової логіки ---
 
         event.team_colors = {team_name: color for team_name, color in zip(sorted(event.teams.keys()), itertools.cycle(TEAM_COLORS_PALETTE))}
         event.processed_participants = []
@@ -381,6 +347,7 @@ def delete_user(user_id):
         flash('Ви не можете видалити адміністратора.', 'error')
         return redirect(url_for('admin.finances'))
 
+    # Ми все ще намагаємося надіслати лист, але тепер це не блокує реєстрацію
     try:
         msg = Message('Ваш акаунт було видалено', recipients=[user_to_delete.email])
         msg.body = f"""Привіт, {user_to_delete.nickname or user_to_delete.username}!
@@ -407,6 +374,11 @@ def register():
         nickname = request.form['nickname'].strip() or username
         password = request.form['password']
         email = request.form['email'].strip()
+        
+        # --- 4. ОТРИМУЄМО КОД З ФОРМИ ---
+        invite_code_str = request.form['invite_code'].strip().upper()
+
+        # --- 5. ПЕРЕВІРКА ІСНУЮЧИХ КОРИСТУВАЧІВ ---
         if User.query.filter_by(username=username).first():
             flash('Користувач з таким логіном вже існує.', 'error')
             return render_template('register.html')
@@ -414,33 +386,34 @@ def register():
             flash('Ця електронна пошта вже зареєстрована.', 'error')
             return render_template('register.html')
         
+        # --- 6. ПЕРЕВІРКА КОДУ ЗАПРОШЕННЯ ---
+        invite_code = InviteCode.query.filter_by(code=invite_code_str, is_used=False).first()
+        if not invite_code:
+            flash('Недійсний або вже використаний код запрошення.', 'error')
+            return render_template('register.html') # Повертаємо на форму
+
+        # --- 7. СТВОРЕННЯ КОРИСТУВАЧА (ЯКЩО КОД ДІЙСНИЙ) ---
         hashed_password = generate_password_hash(password)
         new_user_role = 'admin' if User.query.count() == 0 else 'user'
-        confirmation_token = os.urandom(24).hex()
-
-        # --- ВІДНОВЛЕНО: Користувач неактивний до підтвердження ---
+        
         new_user = User(
             username=username, 
             nickname=nickname, 
             password_hash=hashed_password, 
             role=new_user_role, 
             email=email, 
-            email_confirmed=False, # <-- Встановлюємо False
-            email_confirmation_token=confirmation_token # <-- Зберігаємо токен
+            email_confirmed=True, # <-- Користувач одразу активний
+            email_confirmation_token=None
         )
         db.session.add(new_user)
-        db.session.commit()
+        
+        # --- 8. ПОЗНАЧАЄМО КОД ЯК ВИКОРИСТАНИЙ ---
+        invite_code.is_used = True
+        invite_code.used_by_username = username # Зберігаємо, хто його використав
+        
+        db.session.commit() # Зберігаємо і юзера, і зміни в коді
 
-        # --- ВІДНОВЛЕНО: Спроба надіслати лист для підтвердження ---
-        try:
-            confirm_url = url_for('confirm_email', token=confirmation_token, _external=True)
-            msg = Message('Підтвердження пошти', recipients=[email], body=f"Привіт, {nickname}!\n\nДля підтвердження пошти перейдіть за посиланням:\n{confirm_url}")
-            mail.send(msg)
-            flash('Реєстрація успішна! На вашу пошту надіслано лист для підтвердження.', 'success')
-        except Exception as e:
-            logging.error(f"Failed to send confirmation email to {email}: {e}")
-            flash(f'Реєстрація успішна, але не вдалося надіслати лист. Зверніться до адміністратора.', 'warning')
-            
+        flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
         return redirect(url_for('login'))
         
     return render_template('register.html')
@@ -453,10 +426,7 @@ def login():
         password = request.form['password']
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
-            # --- ВІДНОВЛЕНО: Перевірка підтвердження пошти ---
-            if not user.email_confirmed:
-                flash('Будь ласка, підтвердьте свою електронну пошту, щоб увійти.', 'warning')
-                return redirect(url_for('login'))
+            # --- 9. ПЕРЕВІРКА ПІДТВЕРДЖЕННЯ ПОШТИ БІЛЬШЕ НЕ ПОТРІБНА ---
             login_user(user)
             flash(f'Вхід успішний! Привіт, {user.nickname or user.username}!', 'success')
             return redirect(request.args.get('next') or url_for('index'))
@@ -473,7 +443,7 @@ def logout():
 
 @app.route('/confirm/<token>')
 def confirm_email(token):
-    # --- ВІДНОВЛЕНО: Логіка підтвердження ---
+    # Ця функція залишається (про всяк випадок), але не використовується при реєстрації
     user = User.query.filter_by(email_confirmation_token=token).first()
     if user:
         user.email_confirmed = True
