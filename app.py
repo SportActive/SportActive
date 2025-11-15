@@ -122,8 +122,24 @@ def index():
     past_events = Event.query.filter(Event.date < current_time_str).all()
     if past_events:
         for event in past_events:
-            active_participants = [p.user.username for p in event.real_participants if p.status == 'active' or p.status is None]
-            cancelled_participants = [p.user.username for p in event.real_participants if p.status in ['refused', 'removed']]
+            # --- ЗМІНА: Оновлена логіка для обробки гостей в логах ---
+            active_participants = []
+            for p in event.real_participants:
+                if p.status == 'active' or p.status is None:
+                    if p.user:
+                        active_participants.append(p.user.username)
+                    else:
+                        active_participants.append('Гість') # Додаємо гостя в лог
+
+            cancelled_participants = []
+            for p in event.real_participants:
+                 if p.status in ['refused', 'removed']:
+                    if p.user:
+                        cancelled_participants.append(p.user.username)
+                    else:
+                        cancelled_participants.append('Гість') # Додаємо гостя в лог
+            # --- КІНЕЦЬ ЗМІНИ ---
+            
             new_log_entry = GameLog(
                 event_name=event.name,
                 event_date=event.date,
@@ -164,6 +180,7 @@ def index():
         monthly_counts = {}
         
         if current_user.is_authenticated and current_user.can_manage_events():
+            # --- ЗМІНА: Фільтруємо user_id != None для статистики ---
             weekly_counts = {user_id: 0 for user_id in all_user_ids}
             
             # 1. Рахуємо майбутні ігри (EventParticipant) на тижні події
@@ -171,7 +188,9 @@ def index():
                                        .join(Event) \
                                        .filter(Event.date >= start_of_week_str, Event.date <= end_of_week_str) \
                                        .filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)) \
+                                       .filter(EventParticipant.user_id != None) \
                                        .group_by(EventParticipant.user_id).all()
+            # --- КІНЕЦЬ ЗМІНИ ---
             
             for user_id, count in future_games_query:
                 if user_id in weekly_counts:
@@ -181,7 +200,7 @@ def index():
             past_logs_query = GameLog.query.filter(GameLog.event_date >= start_of_week_str, GameLog.event_date <= end_of_week_str).all()
             
             for log in past_logs_query:
-                for username in log.active_participants:
+                for username in log.active_participants: # 'Гість' буде проігноровано, що коректно
                     user_id = all_users_map.get(username)
                     if user_id and user_id in weekly_counts:
                         weekly_counts[user_id] += 1
@@ -193,12 +212,15 @@ def index():
             
             monthly_counts = {user_id: 0 for user_id in all_user_ids}
             
+            # --- ЗМІНА: Фільтруємо user_id != None для статистики ---
             # 3a. Майбутні за 30 днів
             future_monthly_query = db.session.query(EventParticipant.user_id, func.count(EventParticipant.id)) \
                                        .join(Event) \
                                        .filter(Event.date >= thirty_days_ago_str, Event.date <= event_date_str) \
                                        .filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)) \
+                                       .filter(EventParticipant.user_id != None) \
                                        .group_by(EventParticipant.user_id).all()
+            # --- КІНЕЦЬ ЗМІНИ ---
 
             for user_id, count in future_monthly_query:
                 if user_id in monthly_counts:
@@ -208,29 +230,49 @@ def index():
             past_monthly_query = GameLog.query.filter(GameLog.event_date >= thirty_days_ago_str, GameLog.event_date <= event_date_str).all()
             
             for log in past_monthly_query:
-                for username in log.active_participants:
+                for username in log.active_participants: # 'Гість' буде проігноровано
                     user_id = all_users_map.get(username)
                     if user_id and user_id in monthly_counts:
                         monthly_counts[user_id] += 1
 
         event.team_colors = {team_name: color for team_name, color in zip(sorted(event.teams.keys()), itertools.cycle(TEAM_COLORS_PALETTE))}
+        
+        # --- ЗМІНА: Оновлена логіка для обробки p_entry.user == None (Гість) ---
         event.processed_participants = []
         for p_entry in event.real_participants.order_by(EventParticipant.join_date.asc()).all():
-            p_dict = {
-                'user_id': p_entry.user.id,
-                'username': p_entry.user.username,
-                'nickname': p_entry.user.nickname or p_entry.user.username,
-                'timestamp': p_entry.join_date,
-                'status': p_entry.status or 'active',
-                'assigned_team_name': next((name for name, members in event.teams.items() if p_entry.user.username in members), None),
-                'stats': None
-            }
-            if current_user.is_authenticated and current_user.can_manage_events():
-                 p_dict['stats'] = {
-                    'weekly_count': weekly_counts.get(p_entry.user_id, 0),
-                    'monthly_count': monthly_counts.get(p_entry.user_id, 0)
+            if p_entry.user:
+                # --- Це зареєстрований користувач ---
+                p_dict = {
+                    'participant_id': p_entry.id, # ID самого запису EventParticipant
+                    'is_guest': False,
+                    'user_id': p_entry.user.id,
+                    'username': p_entry.user.username,
+                    'nickname': p_entry.user.nickname or p_entry.user.username,
+                    'timestamp': p_entry.join_date,
+                    'status': p_entry.status or 'active',
+                    'assigned_team_name': next((name for name, members in event.teams.items() if p_entry.user.username in members), None),
+                    'stats': None
+                }
+                if current_user.is_authenticated and current_user.can_manage_events():
+                     p_dict['stats'] = {
+                        'weekly_count': weekly_counts.get(p_entry.user.id, 0),
+                        'monthly_count': monthly_counts.get(p_entry.user.id, 0)
+                    }
+            else:
+                # --- Це Гість ---
+                p_dict = {
+                    'participant_id': p_entry.id, # ID самого запису EventParticipant
+                    'is_guest': True,
+                    'user_id': None,
+                    'username': 'guest',
+                    'nickname': 'Гість', # Ім'я для відображення
+                    'timestamp': p_entry.join_date,
+                    'status': p_entry.status or 'active',
+                    'assigned_team_name': None,
+                    'stats': None
                 }
             event.processed_participants.append(p_dict)
+        # --- КІНЕЦЬ ЗМІНИ ---
         
         event.active_participants_count = sum(1 for p in event.processed_participants if p['status'] == 'active')
 
@@ -328,12 +370,78 @@ def toggle_participation(event_id):
             participant_entry.join_date = datetime.utcnow()
             flash(f'Ваша участь у події "{event.name}" відновлена!', 'success')
     else:
+        # --- ЗМІНА: Перевірка максимальної кількості учасників ---
+        active_count = EventParticipant.query.filter_by(event_id=event.id).filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)).count()
+        if event.max_participants and active_count >= event.max_participants:
+            flash(f'На жаль, на подію "{event.name}" вже досягнуто максимальну кількість учасників ({event.max_participants}).', 'warning')
+            return redirect(url_for('index', _anchor=f'event-{event_id}'))
+        # --- КІНЕЦЬ ЗМІНИ ---
+        
         new_participant = EventParticipant(event_id=event_id, user_id=current_user.id, status='active')
         db.session.add(new_participant)
         flash('Ви успішно зареєструвалися на подію!', 'success')
 
     db.session.commit()
     return redirect(url_for('index', _anchor=f'event-{event_id}'))
+
+# --- ЗМІНА: НОВИЙ МАРШРУТ ДЛЯ ДОДАВАННЯ ГОСТЯ ---
+@app.route('/add_guest/<int:event_id>', methods=['POST'])
+@login_required
+def add_guest(event_id):
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу.', 'error')
+        return redirect(url_for('index'))
+
+    event = Event.query.get_or_404(event_id)
+    
+    # Перевірка на максимальну кількість учасників
+    active_count = EventParticipant.query.filter_by(event_id=event.id).filter(or_(EventParticipant.status == 'active', EventParticipant.status == None)).count()
+    if event.max_participants and active_count >= event.max_participants:
+        flash(f'Досягнуто максимальну кількість учасників ({event.max_participants}).', 'warning')
+        return redirect(url_for('index', _anchor=f'event-{event_id}'))
+
+    new_guest = EventParticipant(
+        event_id=event_id,
+        user_id=None, # Це ключовий момент - user_id порожній
+        status='active'
+    )
+    db.session.add(new_guest)
+    db.session.commit()
+    flash('Гостя успішно додано.', 'success')
+    return redirect(url_for('index', _anchor=f'event-{event_id}'))
+# --- КІНЕЦЬ ЗМІНИ ---
+
+# --- ЗМІНА: НОВИЙ МАРШРУТ ДЛЯ СКАСУВАННЯ/ПОВЕРНЕННЯ ГОСТЯ ---
+@app.route('/admin/toggle_guest/<int:participant_id>', methods=['POST'])
+@login_required
+def admin_toggle_guest_status(participant_id):
+    if not current_user.can_manage_events():
+        flash('У вас немає дозволу.', 'error')
+        return redirect(url_for('index'))
+
+    # Знаходимо запис за його власним ID (id з таблиці event_participant)
+    guest_entry = EventParticipant.query.get_or_404(participant_id)
+    event_id = guest_entry.event_id # Зберігаємо ID події для повернення
+    
+    # Перевірка, що це дійсно гість (user_id is None)
+    if guest_entry.user_id is not None:
+        flash('Це не гість. Використовуйте іншу кнопку.', 'error')
+        return redirect(url_for('index', _anchor=f'event-{event_id}'))
+    
+    try:
+        if guest_entry.status == 'active' or guest_entry.status is None:
+            guest_entry.status = 'refused' # "Скасовано"
+            flash('Участь гостя скасовано.', 'success')
+        else:
+            guest_entry.status = 'active'
+            flash('Участь гостя відновлено.', 'success')
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Помилка сервера: {e}', 'error')
+        
+    return redirect(url_for('index', _anchor=f'event-{event_id}'))
+# --- КІНЕЦЬ ЗМІНИ ---
 
 @app.route('/api/admin/toggle_participant/<int:event_id>/<int:user_id>', methods=['POST'])
 @login_required
@@ -674,7 +782,9 @@ def manage_teams(event_id):
         return redirect(url_for('index'))
     event = Event.query.get_or_404(event_id)
     user_nicknames = {u.username: u.nickname or u.username for u in User.query.all()}
-    active_participants = [p.user.username for p in event.real_participants if p.status == 'active' or p.status is None]
+    # --- ЗМІНА: Ігноруємо гостей при розподілі на команди ---
+    active_participants = [p.user.username for p in event.real_participants if p.user and (p.status == 'active' or p.status is None)]
+    # --- КІНЕЦЬ ЗМІНИ ---
     assigned_participants = {member for members in event.teams.values() for member in members}
     unassigned_participants = [p for p in active_participants if p not in assigned_participants]
     return render_template('manage_teams.html', event=event, unassigned_participants=unassigned_participants, user_nicknames=user_nicknames)

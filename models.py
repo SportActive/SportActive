@@ -69,7 +69,9 @@ class EventParticipant(db.Model):
     __tablename__ = 'event_participant'
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='CASCADE'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    # --- ЗМІНА: Дозволяємо user_id бути порожнім (для гостей) ---
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=True)
+    # --- КІНЕЦЬ ЗМІНИ ---
     join_date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), nullable=True)
     user = db.relationship('User', backref=db.backref('participations', lazy='dynamic'))

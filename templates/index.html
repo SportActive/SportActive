@@ -7,6 +7,9 @@
     .event-comment { background-color: #fffbe6; border-left: 4px solid #ffc107; padding: 10px 15px; margin-top: 15px; border-radius: 4px; font-style: italic; color: #5d4c15; }
     .participant-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 5px 0; border-bottom: 1px dashed #eee; flex-wrap: wrap; }
     .participant-name { font-weight: 600; color: #34495e; }
+    /* --- ЗМІНА: Стиль для імені гостя --- */
+    .guest-name { font-style: italic; color: #555; }
+    /* --- КІНЕЦЬ ЗМІНИ --- */
     .cancelled-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8em; margin-left: 5px; white-space: nowrap; }
     .refused-status { background-color: #f8d7da; color: #721c24; }
     .removed-status { background-color: #ffc107; color: #343a40; }
@@ -59,13 +62,13 @@
                 {% for p_entry in event.processed_participants %}
                     <li class="participant-row">
                         <span class="participant-info-group">
-                            <span class="participant-name">
+                            <span class="participant-name {% if p_entry.is_guest %}guest-name{% endif %}">
                                 {{ p_entry.nickname }}
                                 
-                                {% if p_entry.username in paid_users_for_current_month %}
+                                {% if not p_entry.is_guest and p_entry.username in paid_users_for_current_month %}
                                     <span class="fee-paid-badge" title="Внесок за поточний місяць сплачено">&#10003;</span>
                                 {% endif %}
-                                </span>
+                            </span>
                             <span class="participation-info">(Запис: {{ format_datetime_for_display(p_entry.timestamp) }}
                                 {% if p_entry.status == 'refused' %}<span class="cancelled-badge refused-status">Відмовився</span>
                                 {% elif p_entry.status == 'removed' %}<span class="cancelled-badge removed-status">Грає в інший день</span>
@@ -75,32 +78,42 @@
                         
                         {% if current_user.is_authenticated and current_user.can_manage_events() %}
                             <span class="participant-actions-group">
-                                {% if p_entry.stats %}
-                                    <span class="admin-stats" title="Ігор на цьому тижні / за останні 30 днів">
-                                        Тиждень: <strong>{{ p_entry.stats.weekly_count }}</strong>, 30 днів: <strong>{{ p_entry.stats.monthly_count }}</strong>
-                                    </span>
-                                {% endif %}
-                                
-                                {% if p_entry.user_id != current_user.id %}
-                                    <form action="{{ url_for('admin_toggle_participant_status', event_id=event.id, user_id=p_entry.user_id) }}" method="POST" style="display: inline;">
+
+                                {% if p_entry.is_guest %}
+                                    <form action="{{ url_for('admin_toggle_guest_status', participant_id=p_entry.participant_id) }}" method="POST" style="display: inline;">
                                         {% if p_entry.status == 'active' %}
-                                            <button type="submit" class="remove-participant-btn" title="Зняти учасника з гри">Зняти</button>
-                                        {% elif p_entry.status in ['removed', 'refused'] %}
-                                            <button type="submit" class="button join-button small-button" title="Повернути учасника в гру">Повернути</button>
+                                            <button type="submit" class="remove-participant-btn" title="Скасувати участь гостя">Скасувати</button>
+                                        {% else %}
+                                            <button type="submit" class="button join-button small-button" title="Повернути гостя в гру">Повернути</button>
                                         {% endif %}
                                     </form>
+                                {% else %}
+                                    {% if p_entry.stats %}
+                                        <span class="admin-stats" title="Ігор на цьому тижні / за останні 30 днів">
+                                            Тиждень: <strong>{{ p_entry.stats.weekly_count }}</strong>, 30 днів: <strong>{{ p_entry.stats.monthly_count }}</strong>
+                                        </span>
+                                    {% endif %}
+                                    
+                                    {% if p_entry.user_id != current_user.id %}
+                                        <form action="{{ url_for('admin_toggle_participant_status', event_id=event.id, user_id=p_entry.user_id) }}" method="POST" style="display: inline;">
+                                            {% if p_entry.status == 'active' %}
+                                                <button type="submit" class="remove-participant-btn" title="Зняти учасника з гри">Зняти</button>
+                                            {% elif p_entry.status in ['removed', 'refused'] %}
+                                                <button type="submit" class="button join-button small-button" title="Повернути учасника в гру">Повернути</button>
+                                            {% endif %}
+                                        </form>
+                                    {% endif %}
                                 {% endif %}
-                            </span>
+                                </span>
                         {% endif %}
                     </li>
                 {% else %}
                     <li>Поки що ніхто не зареєструвався.</li>
                 {% endfor %}
-            </ul>
+                </ul>
 
             {% if current_user.is_authenticated %}
                 
-                <!-- --- ЛОГІКА: КНОПКИ ТІЛЬКИ ДЛЯ АКТИВОВАНИХ --- -->
                 {% if current_user.email_confirmed %}
                     <form action="{{ url_for('toggle_participation', event_id=event.id) }}" method="POST" style="display: inline-block;">
                         {% set current_user_status = '' %}
@@ -113,19 +126,27 @@
                         {% elif current_user_status == 'removed' %}
                             <button type="button" class="button join-button" disabled title="Адміністратор зняв вас з гри">Я зможу</button>
                         {% else %}
-                            <button type="submit" class="button join-button">Я зможу</button>
-                        {% endif %}
+                            {% if event.max_participants and event.active_participants_count >= event.max_participants %}
+                                <button type="button" class="button join-button" disabled title="Досягнуто максимальну кількість учасників">Місць немає</button>
+                            {% else %}
+                                <button type="submit" class="button join-button">Я зможу</button>
+                            {% endif %}
+                            {% endif %}
                     </form>
                 {% else %}
-                    <!-- --- ПОВІДОМЛЕННЯ ДЛЯ НЕАКТИВОВАНИХ --- -->
                     <div class="activation-prompt">
                         <p>Щоб зареєструватись на подію, вам потрібно <a href="{{ url_for('activate_account') }}">активувати ваш акаунт</a>.</p>
                     </div>
                 {% endif %}
-                <!-- --- КІНЕЦЬ ЛОГІКИ --- -->
-                
                 {% if current_user.can_manage_events() %}
                     <div class="admin-event-actions">
+                        <form action="{{ url_for('add_guest', event_id=event.id) }}" method="POST" style="display: inline-block;">
+                            {% if event.max_participants and event.active_participants_count >= event.max_participants %}
+                                <button type="button" class="small-button" disabled title="Досягнуто максимальну кількість учасників">+ Додати гостя</button>
+                            {% else %}
+                                <button type="submit" class="small-button" style="background-color: #28a745; color: white;">+ Додати гостя</button>
+                            {% endif %}
+                        </form>
                         <a href="{{ url_for('manage_teams', event_id=event.id) }}" class="admin-manage-teams-link small-button">Керувати командами</a>
                         <a href="{{ url_for('edit_event', event_id=event.id) }}" class="admin-edit-event-link small-button">Редагувати</a>
                         <form action="{{ url_for('delete_event', event_id=event.id) }}" method="POST" style="display: inline-block;"><button type="submit" class="admin-delete-event-btn small-button" onclick="return confirm('Ви впевнені?');">Видалити</button></form>
