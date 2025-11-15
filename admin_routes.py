@@ -61,29 +61,24 @@ def finances():
                     flash(f'Внесок для {user.nickname or user.username} успішно оновлено.', 'success')
                 except (ValueError, TypeError):
                     flash('Невірний формат суми внеску.', 'error')
-        
-        # --- ЗМІНА (Критерій 3): Перенаправляємо на той самий період ---
-        # Передаємо 'period' при перенаправленні, щоб зберегти фільтр
-        period_arg = request.args.get('period')
-        redirect_url = url_for('admin.finances')
-        if period_arg is not None:
-             redirect_url = url_for('admin.finances', period=period_arg)
-        return redirect(redirect_url)
-        # --- КІНЕЦЬ ЗМІНИ ---
+        return redirect(url_for('admin.finances', period=request.args.get('period', '')))
 
-    # --- ЗМІНА (Критерій 3): Фільтр за замовчуванням ---
-    period = request.args.get('period') # Отримуємо 'period', може бути None
+    # --- ОНОВЛЕНА ЛОГІКА ФІЛЬТРУ ---
+    # Використовуємо 'DEFAULT_MARKER', щоб розрізнити відсутність параметра і порожній параметр
+    period = request.args.get('period', 'DEFAULT_MARKER')
     
-    # Якщо 'period' не передано (None), встановлюємо поточний місяць
-    if period is None:
+    if period == 'DEFAULT_MARKER':
+        # 1. Параметр 'period' не надано (завантаження за замовчуванням) -> встановлюємо поточний місяць
         period = datetime.now().strftime('%Y-%m')
-    # Якщо 'period' це порожній рядок (period=""), це означає "за весь час"
-    # --- КІНЕЦЬ ЗМІНИ ---
-    
+    elif period == '':
+        # 2. Параметр 'period' надано, але він порожній (period='') -> показуємо "за весь час"
+        pass # period залишається порожнім
+    # 3. В іншому випадку (period='YYYY-MM') -> використовуємо наданий місяць
+
     query = FinancialTransaction.query
     start_balance = 0.0
     
-    if period: # Ця логіка тепер спрацює для поточного місяця за замовчуванням
+    if period: # Ця умова спрацює для 'YYYY-MM', але не для ''
         try:
             start_of_month = datetime.strptime(period, '%Y-%m')
             end_of_month = (start_of_month.replace(day=28) + timedelta(days=4)).replace(day=1)
@@ -91,9 +86,7 @@ def finances():
             start_balance = db.session.query(func.sum(FinancialTransaction.amount)).filter(FinancialTransaction.date < start_of_month.strftime('%Y-%m-%d')).scalar() or 0.0
         except ValueError:
             flash('Неправильний формат періоду.', 'warning')
-            period = '' # Скидаємо на "весь час" у разі помилки
-            query = FinancialTransaction.query # Перезапитуємо всі транзакції
-            start_balance = 0.0
+            period = '' # Скидаємо на "за весь час", якщо формат невірний
     
     transactions = query.order_by(FinancialTransaction.date.desc()).all()
     
@@ -103,10 +96,11 @@ def finances():
     
     summary = {'start_balance': round(start_balance, 2), 'total_income': round(total_income, 2), 'total_expenses': round(abs(total_expenses), 2), 'end_balance': round(end_balance, 2)}
 
-    current_month_str = datetime.now().strftime('%Y-%m')
-    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({current_month_str})%")).all() if ' від ' in t.description}
+    # Визначаємо поточний місяць для перевірки, хто сплатив
+    check_period = period if period else datetime.now().strftime('%Y-%m')
+    paid_users_for_current_month = {t.description.split(' від ')[-1] for t in FinancialTransaction.query.filter(FinancialTransaction.description.like(f"%Членський внесок ({check_period})%")).all() if ' від ' in t.description}
     
-    # --- Логіка для відслідковування активності користувачів ---
+    # --- ОНОВЛЕНА ЛОГІКА СТАТУСІВ КОРИСТУВАЧІВ ---
     users = User.query.filter(User.role != 'admin').order_by(User.username).all()
     
     all_logs = GameLog.query.all()
@@ -123,73 +117,78 @@ def finances():
     users_data = []
     two_months_ago = datetime.utcnow() - timedelta(days=60)
     
+    active_count = 0
+    inactive_count = 0
+    pending_count = 0
+
     for user in users:
-        last_participation = db.session.query(func.max(EventParticipant.join_date)).filter(
-            EventParticipant.user_id == user.id
-        ).scalar()
-
-        last_log = user_last_log_date.get(user.username)
-
-        last_activity = max(last_participation, last_log) if last_participation and last_log else (last_participation or last_log)
-
-        is_inactive = not last_activity or last_activity < two_months_ago
-
-        # --- ЗМІНА (Критерій 4): Логіка сортування та статусів ---
+        is_paid_current_month = user.username in paid_users_for_current_month
         
-        # Безпечно перевіряємо статус "pending".
-        # 'status' - це назва поля у вашій моделі User, яке ви маєте додати.
-        # 'pending' - це значення, яке ви маєте встановити при реєстрації.
-        is_pending = getattr(user, 'status', None) == 'pending' # Або 'Чекає активації'
-        
-        is_paid = user.username in paid_users_for_current_month
-        
-        # Визначаємо сортувальний пріоритет
-        if is_pending or is_inactive:
-            sort_priority = 3 # (3) Внизу: Неактивні та ті, що чекають
-        elif is_paid:
-            sort_priority = 2 # (2) Оплативші
-        else:
-            sort_priority = 1 # (1) Нагорі: Неоплативші (активні)
-        # --- КІНЕЦЬ ЗМІНИ ---
-
-        users_data.append({
+        data = {
             'user': user,
-            'is_inactive': is_inactive,
-            'last_activity': last_activity.strftime('%d.%m.%Y') if last_activity else 'Немає даних',
-            # --- ЗМІНА (Критерій 4): Додаємо нові дані ---
-            'is_paid': is_paid,
-            'is_pending': is_pending,
-            'sort_priority': sort_priority
-            # --- КІНЕЦЬ ЗМІНИ ---
-        })
-    
-    # --- ЗМІНА (Критерій 4): Оновлення статистики ---
-    active_count = sum(1 for data in users_data if not data['is_inactive'] and not data['is_pending'])
-    inactive_count = sum(1 for data in users_data if data['is_inactive'])
-    pending_count = sum(1 for data in users_data if data['is_pending'])
+            'is_inactive': False,
+            'is_pending': False,
+            'is_paid': is_paid_current_month, # <-- Додаємо статус оплати
+            'last_activity': 'Немає даних',
+            'status_text': 'Активний',
+            'status_class': ''
+        }
+        
+        if not user.email_confirmed:
+            data['is_pending'] = True
+            data['status_text'] = 'Чекає активації'
+            data['status_class'] = 'pending-user-row'
+            pending_count += 1
+        else:
+            last_participation = db.session.query(func.max(EventParticipant.join_date)).filter(
+                EventParticipant.user_id == user.id
+            ).scalar()
+
+            last_log = user_last_log_date.get(user.username)
+            last_activity = max(last_participation, last_log) if last_participation and last_log else (last_participation or last_log)
+
+            if last_activity:
+                data['last_activity'] = last_activity.strftime('%d.%m.%Y')
+                if last_activity < two_months_ago:
+                    data['is_inactive'] = True
+                    data['status_text'] = 'Неактивний'
+                    data['status_class'] = 'inactive-user-row'
+                    inactive_count += 1
+                else:
+                    active_count += 1 # Активний
+            else:
+                # Активований, але жодного разу не грав
+                data['is_inactive'] = True 
+                data['status_text'] = 'Неактивний (не грав)'
+                data['status_class'] = 'inactive-user-row'
+                inactive_count += 1
+        
+        users_data.append(data)
+
     user_stats = {'active': active_count, 'inactive': inactive_count, 'pending': pending_count}
-    # --- КІНЕЦЬ ЗМІНИ ---
     
-    # --- ЗМІНА (Критерій 4): Нове сортування ---
+    # --- СОРТУВАННЯ ЗА ТВОЇМ ЗАПИТОМ ---
+    # 1. (Pending + Inactive) внизу (False < True)
+    # 2. (Unpaid) спочатку (is_paid=False < is_paid=True)
+    # 3. За нікнеймом
     users_data.sort(key=lambda item: (
-        item['sort_priority'], 
+        item['is_pending'] or item['is_inactive'], 
+        item['is_paid'], 
         (item['user'].nickname or item['user'].username).lower()
     ))
-    # --- КІНЕЦЬ ЗМІНИ ---
+    # --- КІНЕЦЬ СОРТУВАННЯ ---
 
-    # (Критерій 5): Цей код вже був у вашому файлі
     unused_codes = InviteCode.query.filter_by(is_used=False).order_by(InviteCode.created_at.desc()).all()
     
     return render_template('finances.html', 
                            users_data=users_data, 
                            transactions=transactions, 
                            summary=summary, 
-                           period_filter=period, # Передаємо 'period' (може бути '' або 'РРРР-ММ')
+                           period_filter=period, 
                            paid_users_for_current_month=paid_users_for_current_month, 
                            user_stats=user_stats,
                            unused_codes=unused_codes)
 
-# (Критерій 5): Цей код вже був у вашому файлі
 @admin_bp.route('/generate_invite', methods=['POST'])
 @login_required
 def generate_invite_code():
@@ -197,6 +196,7 @@ def generate_invite_code():
         flash('Доступ заборонено.', 'error')
         return redirect(url_for('admin.finances'))
 
+    # Створюємо унікальний код
     while True:
         new_code_str = f"SPORT-{secrets.token_hex(4).upper()}"
         existing_code = InviteCode.query.filter_by(code=new_code_str).first()
@@ -255,22 +255,6 @@ def update_user_role(user_id):
         return redirect(url_for('admin.finances'))
     user_to_update = User.query.get_or_404(user_id)
     new_role = request.form.get('role')
-    
-    # --- ЗМІНА (Критерій 1): Додаємо можливість активації ---
-    # Дозволяємо змінювати роль, А ТАКОЖ активувати користувачів
-    
-    # Якщо прийшов запит на зміну статусу (наприклад, з 'pending' на 'user')
-    new_status = request.form.get('status') 
-    if new_status and hasattr(user_to_update, 'status'):
-         # Перевіряємо, чи такий статус взагалі допустимий (наприклад, 'user', 'pending')
-         # Цю логіку вам треба уточнити
-         if new_status in ['user', 'pending']: # Приклад
-            user_to_update.status = new_status
-            db.session.commit()
-            flash(f'Статус для {user_to_update.nickname or user_to_update.username} оновлено на "{new_status}".', 'success')
-            return redirect(url_for('admin.finances'))
-
-    # Логіка зміни ролі (admin, superuser, user)
     if new_role in ['user', 'superuser', 'admin']:
         if user_to_update.id == current_user.id and user_to_update.is_admin() and new_role != 'admin':
             if User.query.filter_by(role='admin').count() <= 1:
@@ -281,18 +265,15 @@ def update_user_role(user_id):
         flash(f'Роль для {user_to_update.nickname or user_to_update.username} оновлено на "{new_role}".', 'success')
     else:
         flash('Неприпустима роль.', 'error')
-    # --- КІНЕЦЬ ЗМІНИ ---
-        
     return redirect(url_for('admin.finances'))
 
 @admin_bp.route('/announcements', methods=['GET', 'POST'])
 @login_required
 def announcements():
-    # --- ЗМІНА (Критерій 2): Блокування неактивованих ---
-    if getattr(current_user, 'status', None) == 'pending':
-        flash('Ваш акаунт очікує на активацію. Доступ до цього розділу обмежено.', 'warning')
-        return redirect(url_for('index'))
-    # --- КІНЕЦЬ ЗМІНИ ---
+    # --- БЛОКУЄМО НЕАКТИВОВАНИХ ---
+    if not current_user.email_confirmed:
+        flash('Ваш акаунт не активований.', 'warning')
+        return redirect(url_for('activate_account'))
 
     if request.method == 'POST':
         if not current_user.can_manage_events():
@@ -325,12 +306,6 @@ def announcements():
 @admin_bp.route('/edit_announcement/<int:announcement_id>', methods=['GET', 'POST'])
 @login_required
 def edit_announcement(announcement_id):
-    # --- ЗМІНА (Критерій 2): Блокування неактивованих ---
-    if getattr(current_user, 'status', None) == 'pending':
-        flash('Доступ заборонено.', 'warning')
-        return redirect(url_for('index'))
-    # --- КІНЕЦЬ ЗМІНИ ---
-
     if not current_user.can_manage_events():
         flash('У вас немає дозволу на редагування.', 'error')
         return redirect(url_for('admin.announcements'))
@@ -346,12 +321,6 @@ def edit_announcement(announcement_id):
 @admin_bp.route('/delete_announcement/<int:announcement_id>', methods=['POST'])
 @login_required
 def delete_announcement(announcement_id):
-    # --- ЗМІНА (Критерій 2): Блокування неактивованих ---
-    if getattr(current_user, 'status', None) == 'pending':
-        flash('Доступ заборонено.', 'warning')
-        return redirect(url_for('index'))
-    # --- КІНЕЦЬ ЗМІНИ ---
-
     if not current_user.can_manage_events():
         flash('У вас немає дозволу на видалення.', 'error')
         return redirect(url_for('admin.announcements'))
@@ -364,11 +333,10 @@ def delete_announcement(announcement_id):
 @admin_bp.route('/polls', methods=['GET', 'POST'])
 @login_required
 def polls():
-    # --- ЗМІНА (Критерій 2): Блокування неактивованих ---
-    if getattr(current_user, 'status', None) == 'pending':
-        flash('Ваш акаунт очікує на активацію. Доступ до цього розділу обмежено.', 'warning')
-        return redirect(url_for('index'))
-    # --- КІНЕЦЬ ЗМІНИ ---
+    # --- БЛОКУЄМО НЕАКТИВОВАНИХ ---
+    if not current_user.email_confirmed:
+        flash('Ваш акаунт не активований.', 'warning')
+        return redirect(url_for('activate_account'))
 
     if request.method == 'POST':
         if not current_user.can_manage_events():
@@ -402,12 +370,11 @@ def polls():
 @admin_bp.route('/vote_poll/<int:poll_id>', methods=['POST'])
 @login_required
 def vote_poll(poll_id):
-    # --- ЗМІНА (Критерій 2): Блокування неактивованих ---
-    if getattr(current_user, 'status', None) == 'pending':
-        flash('Ваш акаунт очікує на активацію. Голосування недоступне.', 'warning')
-        return redirect(url_for('admin.polls'))
-    # --- КІНЕЦЬ ЗМІНИ ---
-
+    # --- БЛОКУЄМО НЕАКТИВОВАНИХ ---
+    if not current_user.email_confirmed:
+        flash('Ваш акаунт не активований.', 'warning')
+        return redirect(url_for('activate_account'))
+        
     poll = Poll.query.get_or_404(poll_id)
     if current_user.username in poll.voted_users:
         flash('Ви вже проголосували в цьому опитуванні.', 'info')
@@ -440,12 +407,6 @@ def vote_poll(poll_id):
 @admin_bp.route('/delete_poll/<int:poll_id>', methods=['POST'])
 @login_required
 def delete_poll(poll_id):
-    # --- ЗМІНА (Критерій 2): Блокування неактивованих ---
-    if getattr(current_user, 'status', None) == 'pending':
-        flash('Доступ заборонено.', 'warning')
-        return redirect(url_for('index'))
-    # --- КІНЕЦЬ ЗМІНИ ---
-
     if not current_user.can_manage_events():
         flash('У вас немає дозволу на видалення.', 'error')
         return redirect(url_for('admin.polls'))
@@ -454,10 +415,6 @@ def delete_poll(poll_id):
     db.session.commit()
     flash('Опитування успішно видалено!', 'success')
     return redirect(url_for('admin.polls'))
-
-# ... (Решта файлу: game_log, export_game_log, fee_log, export_fee_log, export_finances) ...
-# ... Вони не потребують змін для блокування, оскільки вже захищені ...
-# ... 'can_manage_events()' або 'can_view_finances()', яких у 'pending' користувача не буде ...
 
 @admin_bp.route('/game_log')
 @login_required
@@ -597,11 +554,12 @@ def export_finances():
             query = query.filter(FinancialTransaction.date >= start_of_month.strftime('%Y-%m-%d'),
                                  FinancialTransaction.date < end_of_month.strftime('%Y-%m-%d'))
         except ValueError:
-            pass 
+            pass  # Ignore invalid period format
 
     transactions = query.order_by(FinancialTransaction.date.asc()).all()
 
     si = StringIO()
+    # Ensure UTF-8 encoding with BOM for Excel compatibility
     si.write('\ufeff')
     cw = csv.writer(si)
     cw.writerow(['Дата', 'Опис', 'Тип', 'Сума', 'Занотував', 'Час запису'])
