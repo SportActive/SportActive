@@ -5,7 +5,7 @@ from itsdangerous import URLSafeTimedSerializer
 from datetime import datetime
 import json
 import os
-import secrets # <-- 1. ДОДАЄМО ІМПОРТ
+import secrets # <-- 1. ДОДАНО ІМПОРТ
 
 db = SQLAlchemy()
 

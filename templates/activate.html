@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Активувати акаунт{% endblock %}
+
+{% block content %}
+<div class="form-section">
+    <h2>Активація акаунту</h2>
+    <p>Ваш акаунт ще не активований. Будь ласка, введіть код запрошення, який ви отримали від адміністратора.</p>
+    
+    <form action="{{ url_for('activate_account') }}" method="POST" class="form-narrow">
+        <input type="text" name="invite_code" placeholder="Код запрошення" required style="text-transform: uppercase;">
+        <button type="submit">Активувати</button>
+    </form>
+</div>
+{% endblock %}

@@ -20,7 +20,8 @@
             <input type="text" name="nickname" placeholder="Нікнейм (для відображення на сайті)">
             <input type="email" name="email" placeholder="Електронна пошта" required>
             <input type="password" name="password" placeholder="Пароль" required>
-            <input type="text" name="invite_code" placeholder="Код запрошення" required style="text-transform: uppercase;">
+            <!-- --- ПОЛЕ "required" ВИДАЛЕНО --- -->
+            <input type="text" name="invite_code" placeholder="Код запрошення (необов'язково)" style="text-transform: uppercase;">
             <button type="submit">Зареєструватися</button>
         </form>
         <p>Вже маєте обліковий запис? <a href="{{ url_for('login') }}">Увійти</a></p>

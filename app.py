@@ -10,13 +10,12 @@ import json
 from sqlalchemy import func
 import itertools
 import logging
-from flask_migrate import Migrate # <-- 1. ДОДАЄМО ІМПОРТ
+from flask_migrate import Migrate 
 
 # --- Базове налаштування логування ---
 logging.basicConfig(level=logging.INFO)
 
 from models import db, User, Event, EventParticipant, GameLog, Announcement, Poll, RemovedParticipantLog, FinancialTransaction
-# --- 2. ІМПОРТУЄМО НОВУ МОДЕЛЬ ---
 from models import InviteCode
 
 app = Flask(__name__)
@@ -29,7 +28,7 @@ if database_url and database_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Налаштування пошти (все ще потрібні для відновлення пароля)
+# Налаштування пошти (для відновлення пароля)
 app.config.update(
     MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.sendgrid.net'),
     MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
@@ -42,10 +41,14 @@ app.config.update(
 )
 
 db.init_app(app)
-migrate = Migrate(app, db) # <-- 3. ІНІЦІАЛІЗУЄМО MIGRATE
+migrate = Migrate(app, db) 
 mail = Mail(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+# --- ПОВІДОМЛЕННЯ ДЛЯ НЕ АВТОРИЗОВАНИХ ---
+login_manager.login_message = "Будь ласка, увійдіть, щоб отримати доступ до цієї сторінки."
+login_manager.login_message_category = "info"
+
 
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
@@ -82,6 +85,10 @@ def inject_unread_status():
     if not current_user.is_authenticated:
         return dict(has_unread_announcements=False, has_unread_polls=False)
     
+    # --- Неактивовані користувачі не бачать сповіщень ---
+    if not current_user.email_confirmed:
+        return dict(has_unread_announcements=False, has_unread_polls=False)
+
     try:
         seen_items = current_user.seen_items
         all_announcement_ids = {a.id for a in Announcement.query.with_entities(Announcement.id).all()}
@@ -276,6 +283,11 @@ def copy_week_events():
 @app.route('/toggle_participation/<int:event_id>', methods=['POST'])
 @login_required
 def toggle_participation(event_id):
+    # --- БЛОКУЄМО НЕАКТИВОВАНИХ ---
+    if not current_user.email_confirmed:
+        flash('Ваш акаунт не активований. Будь ласка, введіть код запрошення.', 'warning')
+        return redirect(url_for('activate_account'))
+
     event = Event.query.get_or_404(event_id)
     participant_entry = EventParticipant.query.filter_by(event_id=event_id, user_id=current_user.id).first()
 
@@ -375,10 +387,9 @@ def register():
         password = request.form['password']
         email = request.form['email'].strip()
         
-        # --- 4. ОТРИМУЄМО КОД З ФОРМИ ---
-        invite_code_str = request.form['invite_code'].strip().upper()
+        # --- КОД ЗАПРОШЕННЯ ТЕПЕР НЕОБОВ'ЯЗКОВИЙ ---
+        invite_code_str = request.form.get('invite_code', '').strip().upper()
 
-        # --- 5. ПЕРЕВІРКА ІСНУЮЧИХ КОРИСТУВАЧІВ ---
         if User.query.filter_by(username=username).first():
             flash('Користувач з таким логіном вже існує.', 'error')
             return render_template('register.html')
@@ -386,13 +397,19 @@ def register():
             flash('Ця електронна пошта вже зареєстрована.', 'error')
             return render_template('register.html')
         
-        # --- 6. ПЕРЕВІРКА КОДУ ЗАПРОШЕННЯ ---
-        invite_code = InviteCode.query.filter_by(code=invite_code_str, is_used=False).first()
-        if not invite_code:
-            flash('Недійсний або вже використаний код запрошення.', 'error')
-            return render_template('register.html') # Повертаємо на форму
-
-        # --- 7. СТВОРЕННЯ КОРИСТУВАЧА (ЯКЩО КОД ДІЙСНИЙ) ---
+        is_confirmed = False
+        
+        # --- АКТИВАЦІЯ, ЯКЩО КОД НАДАНО ---
+        if invite_code_str:
+            invite_code = InviteCode.query.filter_by(code=invite_code_str, is_used=False).first()
+            if not invite_code:
+                flash('Ви ввели код, але він недійсний або вже використаний. Спробуйте ще раз або зареєструйтесь без нього.', 'warning')
+                return render_template('register.html')
+            else:
+                is_confirmed = True
+                invite_code.is_used = True
+                invite_code.used_by_username = username
+        
         hashed_password = generate_password_hash(password)
         new_user_role = 'admin' if User.query.count() == 0 else 'user'
         
@@ -402,18 +419,17 @@ def register():
             password_hash=hashed_password, 
             role=new_user_role, 
             email=email, 
-            email_confirmed=True, # <-- Користувач одразу активний
+            email_confirmed=is_confirmed, # <-- ВСТАНОВЛЮЄМО СТАТУС
             email_confirmation_token=None
         )
         db.session.add(new_user)
-        
-        # --- 8. ПОЗНАЧАЄМО КОД ЯК ВИКОРИСТАНИЙ ---
-        invite_code.is_used = True
-        invite_code.used_by_username = username # Зберігаємо, хто його використав
-        
-        db.session.commit() # Зберігаємо і юзера, і зміни в коді
+        db.session.commit() 
 
-        flash('Реєстрація успішна! Тепер ви можете увійти.', 'success')
+        if is_confirmed:
+            flash('Реєстрація успішна! Ваш акаунт активовано. Тепер ви можете увійти.', 'success')
+        else:
+            flash('Реєстрація успішна! Ваш акаунт створено, але він не активований. Увійдіть та введіть код запрошення.', 'info')
+            
         return redirect(url_for('login'))
         
     return render_template('register.html')
@@ -425,14 +441,52 @@ def login():
         username = request.form['username']
         password = request.form['password']
         user = User.query.filter_by(username=username).first()
+        
         if user and user.check_password(password):
-            # --- 9. ПЕРЕВІРКА ПІДТВЕРДЖЕННЯ ПОШТИ БІЛЬШЕ НЕ ПОТРІБНА ---
+            # --- ВХІД ДОЗВОЛЕНО, НАВІТЬ ЯКЩО НЕ АКТИВОВАНО ---
             login_user(user)
-            flash(f'Вхід успішний! Привіт, {user.nickname or user.username}!', 'success')
-            return redirect(request.args.get('next') or url_for('index'))
+            
+            if user.email_confirmed:
+                flash(f'Вхід успішний! Привіт, {user.nickname or user.username}!', 'success')
+                return redirect(request.args.get('next') or url_for('index'))
+            else:
+                # Попередження для неактивованого
+                flash('Ви увійшли, але ваш акаунт не активований. Будь ласка, введіть код запрошення.', 'warning')
+                return redirect(url_for('activate_account')) # <-- Перенаправляємо на сторінку активації
         else:
             flash('Неправильний логін або пароль.', 'error')
     return render_template('login.html')
+
+# --- НОВИЙ МАРШРУТ ДЛЯ АКТИВАЦІЇ ---
+@app.route('/activate', methods=['GET', 'POST'])
+@login_required
+def activate_account():
+    # Якщо користувач вже активований, відправляємо його на головну
+    if current_user.email_confirmed:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        invite_code_str = request.form.get('invite_code', '').strip().upper()
+        
+        invite_code = InviteCode.query.filter_by(code=invite_code_str, is_used=False).first()
+        if not invite_code:
+            flash('Недійсний або вже використаний код запрошення.', 'error')
+            return redirect(url_for('activate_account'))
+        
+        # Активація
+        current_user.email_confirmed = True
+        invite_code.is_used = True
+        invite_code.used_by_username = current_user.username
+        
+        db.session.commit()
+        
+        flash('Акаунт успішно активовано! Тепер вам доступні всі функції.', 'success')
+        return redirect(url_for('index'))
+
+    # GET-запит
+    return render_template('activate.html')
+# --- КІНЕЦЬ НОВОГО МАРШРУТУ ---
+
 
 @app.route('/logout')
 @login_required
@@ -503,9 +557,11 @@ def reset_password(token):
 @app.route('/add_event', methods=['GET', 'POST'])
 @login_required
 def add_event():
+    # --- БЛОКУЄМО НЕАКТИВОВАНИХ ---
     if not current_user.can_manage_events():
         flash('У вас немає дозволу.', 'error')
         return redirect(url_for('index'))
+
     if request.method == 'POST':
         event_name = request.form['event_name']
         event_datetime_str = request.form['event_datetime']

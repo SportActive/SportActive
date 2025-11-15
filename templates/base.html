@@ -13,23 +13,36 @@
         <h1 class="main-title">Активно-спортивні ми</h1>
         <div class="auth-links">
             {% if current_user.is_authenticated %}
-                <p>Привіт, {{ current_user.nickname or current_user.username }}! {% if current_user.is_admin() %}<span class="badge admin-badge">Адмін</span>{% endif %}</p>
+                <p>Привіт, {{ current_user.nickname or current_user.username }}! 
+                    {% if current_user.is_admin() %}<span class="badge admin-badge">Адмін</span>
+                    {% elif not current_user.email_confirmed %}<span class="badge" style="background-color: #ffc107; color: #333;">Не активований</span>
+                    {% endif %}
+                </p>
                 <nav class="user-nav">
                     <a href="{{ url_for('index') }}">Події</a>
-                    <a href="{{ url_for('admin.announcements') }}" class="nav-link {% if has_unread_announcements %}unread{% endif %}">Оголошення</a>
-                    <a href="{{ url_for('admin.polls') }}" class="nav-link {% if has_unread_polls %}unread{% endif %}">Опитування</a>
                     
-                    {% if current_user.is_authenticated and current_user.can_manage_events() %}
-                        <div class="dropdown">
-                            <button class="dropbtn admin-action">Адміністрування ▼</button>
-                            <div class="dropdown-content">
-                                <a href="{{ url_for('add_event') }}">Додати подію</a>
-                                <a href="{{ url_for('admin.finances') }}">Керування фінансами</a>
-                                <a href="{{ url_for('admin.game_log') }}">Журнал подій</a>
-                                <a href="{{ url_for('admin.fee_log') }}">Журнал оплат</a>
+                    <!-- --- ЛОГІКА ДЛЯ ОБМЕЖЕННЯ ДОСТУПУ --- -->
+                    {% if current_user.email_confirmed %}
+                        <!-- Посилання для активованих користувачів -->
+                        <a href="{{ url_for('admin.announcements') }}" class="nav-link {% if has_unread_announcements %}unread{% endif %}">Оголошення</a>
+                        <a href="{{ url_for('admin.polls') }}" class="nav-link {% if has_unread_polls %}unread{% endif %}">Опитування</a>
+                        
+                        {% if current_user.can_manage_events() %}
+                            <div class="dropdown">
+                                <button class="dropbtn admin-action">Адміністрування ▼</button>
+                                <div class="dropdown-content">
+                                    <a href="{{ url_for('add_event') }}">Додати подію</a>
+                                    <a href="{{ url_for('admin.finances') }}">Керування фінансами</a>
+                                    <a href="{{ url_for('admin.game_log') }}">Журнал подій</a>
+                                    <a href="{{ url_for('admin.fee_log') }}">Журнал оплат</a>
+                                </div>
                             </div>
-                        </div>
+                        {% endif %}
+                    {% else %}
+                        <!-- Посилання для НЕактивованих -->
+                        <a href="{{ url_for('activate_account') }}" class="nav-link" style="color: #007bff; font-weight: bold;">Активувати акаунт</a>
                     {% endif %}
+                    <!-- --- КІНЕЦЬ ЛОГІКИ --- -->
 
                     <a href="{{ url_for('logout') }}" class="nav-link logout-link">Вийти</a>
                 </nav>
@@ -37,6 +50,17 @@
                 <a href="{{ url_for('login') }}" class="nav-link">Увійти</a> | <a href="{{ url_for('register') }}" class="nav-link">Реєстрація</a>
             {% endif %}
         </div>
+        
+        <!-- --- ПОПЕРЕДЖЕННЯ ДЛЯ НЕАКТИВОВАНИХ --- -->
+        {% if current_user.is_authenticated and not current_user.email_confirmed %}
+        <div class="flash-messages">
+            <div class="alert alert-warning">
+                Ваш акаунт не активований. Ви можете переглядати події, але не можете брати в них участь. 
+                Будь ласка, <a href="{{ url_for('activate_account') }}">введіть код запрошення</a>, щоб активувати акаунт.
+            </div>
+        </div>
+        {% endif %}
+
         {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-messages">
             {% for category, message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}
         </div>{% endif %}{% endwith %}
