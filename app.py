@@ -11,6 +11,7 @@ from sqlalchemy import func
 import itertools
 import logging
 from flask_migrate import Migrate 
+import threading # --- ЗМІНА: Додано імпорт для потоків ---
 
 # --- Базове налаштування логування ---
 logging.basicConfig(level=logging.INFO)
@@ -58,6 +59,18 @@ TEAM_COLORS_PALETTE = [
     '#e0f7fa', '#dcedc8', '#fff9c4', '#ffcdd2', '#e1bee7',
     '#d1c4e9', '#c5cae9', '#bbdefb', '#b2ebf2', '#b2dfdb'
 ]
+
+# --- ЗМІНА: Додано функцію для асинхронного надсилання пошти ---
+def send_async_email(app_context, msg):
+    """Допоміжна функція для надсилання пошти в окремому потоці."""
+    with app_context.app_context():
+        try:
+            mail.send(msg)
+            logging.info(f"Async email sent successfully to {msg.recipients}")
+        except Exception as e:
+            # Логуємо помилку, але не "вбиваємо" програму
+            logging.error(f"Failed to send async email to {msg.recipients}: {e}")
+# --- КІНЕЦЬ ЗМІНИ ---
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -348,34 +361,56 @@ def admin_toggle_participant_status(event_id, user_id):
         flash(f'Помилка сервера при зміні статусу учасника. {e}', 'error')
     return redirect(url_for('index', _anchor=f'event-{event_id}'))
     
+# --- ЗМІНА: Повністю переписано функцію 'delete_user' ---
 @app.route('/delete_user/<int:user_id>', methods=['POST'])
 @login_required
 def delete_user(user_id):
     if not current_user.is_admin():
         flash('У вас немає дозволу на цю дію.', 'error')
         return redirect(url_for('admin.finances'))
+    
     user_to_delete = User.query.get_or_404(user_id)
+    
     if user_to_delete.is_admin():
         flash('Ви не можете видалити адміністратора.', 'error')
         return redirect(url_for('admin.finances'))
 
-    # Ми все ще намагаємося надіслати лист, але тепер це не блокує реєстрацію
+    # Готуємо дані для листа ПЕРЕД видаленням
+    user_email = user_to_delete.email
+    user_name = user_to_delete.nickname or user_to_delete.username
+    
     try:
-        msg = Message('Ваш акаунт було видалено', recipients=[user_to_delete.email])
-        msg.body = f"""Привіт, {user_to_delete.nickname or user_to_delete.username}!
+        # 1. Видаляємо користувача з бази даних НЕГАЙНО
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        flash(f'Користувача "{user_name}" було успішно видалено.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Failed to delete user {user_name}: {e}")
+        flash(f'Не вдалося видалити користувача. Помилка: {e}', 'error')
+        return redirect(url_for('admin.finances'))
+
+    # 2. Готуємо та відправляємо лист у фоновому потоці
+    try:
+        msg = Message('Ваш акаунт було видалено', recipients=[user_email])
+        msg.body = f"""Привіт, {user_name}!
 Ваш акаунт у системі "Активно-спортивні ми" було видалено через тривалу неактивність.
 Ви завжди можете зареєструватися знову.
 Дякуємо за участь!"""
-        mail.send(msg)
-        flash(f'Користувачу {user_to_delete.username} надіслано сповіщення.', 'info')
+        
+        # Запускаємо відправку в окремому потоці
+        thread = threading.Thread(target=send_async_email, args=[app._get_current_object(), msg])
+        thread.start()
+        
+        flash(f'Користувачу {user_name} надсилається сповіщення.', 'info')
+        
     except Exception as e:
-        logging.error(f"Failed to send deletion email to {user_to_delete.email}: {e}")
-        flash(f'Не вдалося надіслати лист користувачу. Помилка: {e}', 'warning')
+        # Ця помилка спрацює, якщо навіть не вдалося СТВОРИТИ потік (дуже малоймовірно)
+        logging.error(f"Failed to start email thread for {user_email}: {e}")
+        flash(f'Не вдалося запустити відправку листа користувачу. Помилка: {e}', 'warning')
 
-    db.session.delete(user_to_delete)
-    db.session.commit()
-    flash(f'Користувача "{user_to_delete.username}" було успішно видалено.', 'success')
     return redirect(url_for('admin.finances'))
+# --- КІНЕЦЬ ЗМІНИ ---
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -529,10 +564,14 @@ def reset_password_request():
 
 Якщо ви не робили цей запит, просто проігноруйте цей лист."""
                 
-                mail.send(msg)
-                logging.info(f"Password reset email sent successfully to {user.email}")
+                # --- ЗМІНА: Асинхронна відправка для скидання пароля ---
+                thread = threading.Thread(target=send_async_email, args=[app._get_current_object(), msg])
+                thread.start()
+                logging.info(f"Password reset email thread started for {user.email}")
+                # --- КІНЕЦЬ ЗМІНИ ---
+                
             except Exception as e:
-                logging.error(f"Failed to send password reset email to {user.email}: {e}")
+                logging.error(f"Failed to START password reset thread for {user.email}: {e}")
         
         flash('Якщо такий email зареєстровано, на нього було надіслано інструкції з відновлення пароля.', 'info')
         return redirect(url_for('login'))
