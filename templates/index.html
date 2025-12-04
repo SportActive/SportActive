@@ -7,9 +7,7 @@
     .event-comment { background-color: #fffbe6; border-left: 4px solid #ffc107; padding: 10px 15px; margin-top: 15px; border-radius: 4px; font-style: italic; color: #5d4c15; }
     .participant-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 5px 0; border-bottom: 1px dashed #eee; flex-wrap: wrap; }
     .participant-name { font-weight: 600; color: #34495e; }
-    /* --- ЗМІНА: Стиль для імені гостя --- */
     .guest-name { font-style: italic; color: #555; }
-    /* --- КІНЕЦЬ ЗМІНИ --- */
     .cancelled-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8em; margin-left: 5px; white-space: nowrap; }
     .refused-status { background-color: #f8d7da; color: #721c24; }
     .removed-status { background-color: #ffc107; color: #343a40; }
@@ -26,7 +24,6 @@
         line-height: 1;
     }
     
-    /* --- СТИЛЬ ДЛЯ ПОВІДОМЛЕННЯ ПРО АКТИВАЦІЮ --- */
     .activation-prompt {
         background-color: #fff8e1;
         border: 1px solid #ffecb3;
@@ -43,14 +40,6 @@
 <div class="events-list">
     <h3>Заплановані події</h3>
     
-    {% if current_user.is_authenticated and current_user.can_manage_events() %}
-    <div class="admin-global-actions" style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
-        <form action="{{ url_for('copy_week_events') }}" method="POST" onsubmit="return confirm('Ви впевнені, що хочете скопіювати всі події поточного тижня на наступний?');">
-            <button type="submit" class="button">Скопіювати події на наступний тиждень</button>
-        </form>
-    </div>
-    {% endif %}
-
     {% for event in events %}
         <div class="event-card" id="event-{{ event.id }}">
             <h2>{{ event.name }} <span class="event-date">{{ format_datetime_for_display(event.date) }}</span></h2>
